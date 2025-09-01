@@ -197,9 +197,8 @@ export class Minion {
         projectile.position.copy(this.mesh.position);
         projectile.position.y += 0.5;
         
-        // Add glow effect to projectile
-        const projectileLight = new THREE.PointLight(0xff00ff, 0.5, 3);
-        projectile.add(projectileLight);
+        // REMOVED: PointLight causes memory leak
+        // Glow effect handled by emissive material
         
         // Calculate direction
         const direction = targetPosition.clone().sub(projectile.position).normalize();

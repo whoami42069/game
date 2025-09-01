@@ -37,76 +37,40 @@ export class SpaceArena {
   }
 
   private createSpaceSkybox(): void {
-    // Create space skybox with shader material
-    const skyGeometry = new THREE.SphereGeometry(500, 60, 40);
-    const skyMaterial = new THREE.ShaderMaterial({
-      uniforms: {
-        time: { value: 0 },
-        resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        varying vec3 vPosition;
-        
-        void main() {
-          vUv = uv;
-          vPosition = position;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform float time;
-        uniform vec2 resolution;
-        varying vec2 vUv;
-        varying vec3 vPosition;
-        
-        float hash(vec2 p) {
-          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-        }
-        
-        float noise(vec2 p) {
-          vec2 i = floor(p);
-          vec2 f = fract(p);
-          f = f * f * (3.0 - 2.0 * f);
-          
-          float a = hash(i);
-          float b = hash(i + vec2(1.0, 0.0));
-          float c = hash(i + vec2(0.0, 1.0));
-          float d = hash(i + vec2(1.0, 1.0));
-          
-          return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-        }
-        
-        void main() {
-          vec2 uv = vUv;
-          
-          // Deep space background
-          vec3 spaceColor = vec3(0.02, 0.02, 0.08);
-          
-          // Nebula colors
-          vec3 nebula1 = vec3(0.5, 0.1, 0.8); // Purple
-          vec3 nebula2 = vec3(0.1, 0.3, 0.9); // Blue
-          vec3 nebula3 = vec3(0.9, 0.2, 0.5); // Pink
-          
-          // Create nebula patterns
-          float n1 = noise(uv * 3.0 + time * 0.02);
-          float n2 = noise(uv * 5.0 - time * 0.01);
-          float n3 = noise(uv * 8.0 + vec2(time * 0.03, 0.0));
-          
-          vec3 nebula = mix(nebula1, nebula2, n1);
-          nebula = mix(nebula, nebula3, n2 * 0.5);
-          
-          // Add cosmic glow
-          float glow = pow(n3, 3.0) * 0.5;
-          vec3 color = mix(spaceColor, nebula, glow);
-          
-          // Add subtle animation
-          color += vec3(0.05) * sin(time * 0.5 + uv.x * 10.0) * 0.1;
-          
-          gl_FragColor = vec4(color, 1.0);
-        }
-      `,
-      side: THREE.BackSide
+    // SIMPLIFIED: Use basic gradient instead of complex shader
+    const skyGeometry = new THREE.SphereGeometry(500, 32, 20); // Reduced segments
+    
+    // Create simple gradient texture
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d')!;
+    
+    // Create vertical gradient
+    const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+    gradient.addColorStop(0, '#050512'); // Dark purple top
+    gradient.addColorStop(0.5, '#0a0a20'); // Deep blue middle
+    gradient.addColorStop(1, '#141428'); // Dark blue bottom
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 256, 256);
+    
+    // Add some subtle nebula spots
+    ctx.globalAlpha = 0.1;
+    ctx.fillStyle = '#ff00ff';
+    ctx.beginPath();
+    ctx.arc(50, 50, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#00ffff';
+    ctx.beginPath();
+    ctx.arc(200, 150, 40, 0, Math.PI * 2);
+    ctx.fill();
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    
+    const skyMaterial = new THREE.MeshBasicMaterial({
+      map: texture,
+      side: THREE.BackSide,
+      fog: false
     });
     
     const sky = new THREE.Mesh(skyGeometry, skyMaterial);
@@ -187,16 +151,15 @@ export class SpaceArena {
         uniform vec3 color3;
         varying vec2 vUv;
         
-        float noise(vec2 p) {
-          return sin(p.x * 10.0) * sin(p.y * 10.0);
-        }
-        
         void main() {
           vec2 uv = vUv;
-          float n = noise(uv * 5.0 + time * 0.1);
+          // Simplified gradient without noise function
+          float gradient = uv.x * 0.5 + uv.y * 0.5;
           
-          vec3 color = mix(color1, color2, n);
-          color = mix(color, color3, sin(time * 0.5) * 0.5 + 0.5);
+          vec3 color = mix(color1, color2, gradient);
+          // Simple time-based color mix without sin
+          float timeFactor = mod(time * 0.1, 1.0);
+          color = mix(color, color3, timeFactor);
           
           float alpha = 0.3 * (1.0 - length(uv - 0.5) * 2.0);
           
@@ -337,7 +300,7 @@ export class SpaceArena {
   }
 
   private createSpaceDebris(): void {
-    const debrisCount = 25;
+    const debrisCount = 8; // Reduced from 25 for performance
     
     for (let i = 0; i < debrisCount; i++) {
       const debrisGroup = new THREE.Group();
@@ -396,7 +359,7 @@ export class SpaceArena {
   }
 
   private createCosmicParticles(): void {
-    const particleCount = 500;
+    const particleCount = 200; // Reduced from 500 for performance
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
     const colors = new Float32Array(particleCount * 3);
@@ -430,7 +393,7 @@ export class SpaceArena {
   }
 
   private createSolarWind(): void {
-    const particleCount = 800;
+    const particleCount = 300; // Reduced from 800 for performance
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
     const velocities = new Float32Array(particleCount * 3);
@@ -646,15 +609,18 @@ export class SpaceArena {
     }, 1000);
   }
 
-  public update(deltaTime: number): void {
+  public update(deltaTime: number, isPaused: boolean = false): void {
+    // Skip heavy animations if game is paused or in background
+    if (isPaused) return;
+    
     this.time += deltaTime;
     
     // Update billboard system
     this.billboardManager.update(deltaTime);
     
-    // Rotate stars slowly
-    if (this.stars) {
-      this.stars.rotation.y += deltaTime * 0.01;
+    // Rotate stars slowly - reduced frequency
+    if (this.stars && this.time % 0.1 < deltaTime) { // Update less frequently
+      this.stars.rotation.y += 0.001;
     }
     
     // Animate nebula
@@ -682,59 +648,57 @@ export class SpaceArena {
       border.rotation.z += deltaTime * 0.3;
     }
     
-    // Animate asteroids
-    this.asteroids.forEach((asteroid, i) => {
-      asteroid.rotation.x += deltaTime * 0.1 * (1 + i * 0.1);
-      asteroid.rotation.y += deltaTime * 0.15 * (1 + i * 0.05);
+    // OPTIMIZED: Reduced animations for performance
+    // Only animate every 3rd frame and fewer objects
+    const frameSkip = Math.floor(this.time * 60) % 3 === 0;
+    if (frameSkip) {
+      // Animate only first 3 asteroids (was 15)
+      this.asteroids.slice(0, 3).forEach((asteroid, i) => {
+        asteroid.rotation.x += 0.006 * (1 + i * 0.1);
+        asteroid.rotation.y += 0.009 * (1 + i * 0.05);
+      });
       
-      // Slight floating motion
-      asteroid.position.y += Math.sin(this.time + i) * 0.01;
-    });
-    
-    // Animate space debris
-    this.debris.forEach((debris, i) => {
-      debris.rotation.x += deltaTime * 0.2;
-      debris.rotation.y += deltaTime * 0.3;
-      
-      // Floating motion
-      const floatSpeed = 0.5 + (i % 3) * 0.2;
-      debris.position.x += Math.sin(this.time * floatSpeed + i) * 0.02;
-      debris.position.y += Math.cos(this.time * floatSpeed + i * 2) * 0.02;
-    });
-    
-    // Animate cosmic particles
-    if (this.cosmicParticles) {
-      const positions = this.cosmicParticles.geometry.attributes.position;
-      for (let i = 0; i < positions.count; i++) {
-        const y = positions.getY(i);
-        positions.setY(i, y - deltaTime * 5);
-        
-        // Reset particles that fall too low
-        if (y < -10) {
-          positions.setY(i, 100);
-        }
-      }
-      positions.needsUpdate = true;
+      // Animate only first 2 debris
+      this.debris.slice(0, 2).forEach((debris, i) => {
+        debris.rotation.x += 0.04;
+        debris.rotation.y += 0.06;
+      });
     }
     
-    // Animate solar wind
-    if (this.solarWind) {
-      const positions = this.solarWind.geometry.attributes.position;
-      const velocities = this.solarWind.geometry.attributes.velocity;
-      
-      for (let i = 0; i < positions.count; i++) {
-        const z = positions.getZ(i);
-        const vz = velocities.getZ(i);
-        positions.setZ(i, z + vz * deltaTime);
-        
-        // Reset particles that go too far
-        if (z > 150) {
-          positions.setZ(i, -150);
-          positions.setX(i, (Math.random() - 0.5) * 100);
-          positions.setY(i, Math.random() * 50);
+    // OPTIMIZED: Minimal particle updates
+    // Update only every 20th frame for performance
+    if (Math.floor(this.time * 60) % 20 === 0) {
+      // Update cosmic particles - only 1/50th per frame
+      if (this.cosmicParticles) {
+        const positions = this.cosmicParticles.geometry.attributes.position;
+        const step = 50;
+        const offset = Math.floor(this.time * 3) % step;
+        for (let i = offset; i < Math.min(positions.count, 50); i += step) { // Cap at 50
+          const y = positions.getY(i);
+          positions.setY(i, y - 1.0);
+          if (y < -10) {
+            positions.setY(i, 100);
+          }
         }
+        positions.needsUpdate = true;
       }
-      positions.needsUpdate = true;
+      
+      // Update solar wind - only 1/20th per frame
+      if (this.solarWind) {
+        const positions = this.solarWind.geometry.attributes.position;
+        const velocities = this.solarWind.geometry.attributes.velocity;
+        const step = 20;
+        const offset = Math.floor(this.time * 6) % step;
+        for (let i = offset; i < Math.min(positions.count, 100); i += step) { // Cap at 100
+          const z = positions.getZ(i);
+          const vz = velocities.getZ(i);
+          positions.setZ(i, z + vz * 0.1);
+          if (z > 150) {
+            positions.setZ(i, -150);
+          }
+        }
+        positions.needsUpdate = true;
+      }
     }
     
     // Update skybox shader

@@ -38,21 +38,19 @@ export class ItemDrop {
   }
 
   private createModel(): void {
-    // Create floating item container
+    // OPTIMIZED: Use simpler geometry for better performance
     const containerGeometry = new THREE.OctahedronGeometry(0.5, 0);
-    const containerMaterial = new THREE.MeshPhysicalMaterial({
+    const containerMaterial = new THREE.MeshBasicMaterial({
       color: this.itemData.color,
       emissive: this.itemData.color,
-      emissiveIntensity: 0.5,
-      metalness: 0.8,
-      roughness: 0.2,
+      emissiveIntensity: 0.8, // Increased to compensate for removed light
       transparent: true,
-      opacity: 0.8
+      opacity: 0.9
     });
     const container = new THREE.Mesh(containerGeometry, containerMaterial);
     
-    // Add inner glow sphere
-    const glowGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+    // Simplified glow - fewer polygons
+    const glowGeometry = new THREE.SphereGeometry(0.3, 6, 6); // Reduced segments
     const glowMaterial = new THREE.MeshBasicMaterial({
       color: this.itemData.color,
       transparent: true,
@@ -60,11 +58,8 @@ export class ItemDrop {
     });
     const glow = new THREE.Mesh(glowGeometry, glowMaterial);
     
-    // Add point light for item glow
-    const light = new THREE.PointLight(this.itemData.color, 2, 5);
-    
-    // Add outer ring
-    const ringGeometry = new THREE.TorusGeometry(0.8, 0.1, 8, 16);
+    // Simplified ring - fewer segments
+    const ringGeometry = new THREE.TorusGeometry(0.8, 0.1, 4, 8); // Reduced segments
     const ringMaterial = new THREE.MeshBasicMaterial({
       color: this.itemData.color,
       transparent: true,
@@ -74,7 +69,7 @@ export class ItemDrop {
     
     this.mesh.add(container);
     this.mesh.add(glow);
-    this.mesh.add(light);
+    // light removed - was causing performance issues
     this.mesh.add(ring);
   }
 

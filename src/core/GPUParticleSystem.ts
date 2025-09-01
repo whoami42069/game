@@ -154,11 +154,16 @@ export class GPUParticleSystem {
   }
 
   public update(deltaTime: number, _playerPosition?: THREE.Vector3): void {
+    // Early return if no emission and no active particles
+    if (this.options.emissionRate <= 0 && this.particleCount <= 0) {
+      return;
+    }
+    
     this.time += deltaTime;
     this.updateFrame++;
     
     // Emit new particles based on emission rate
-    const emissionInterval = 1 / this.options.emissionRate;
+    const emissionInterval = this.options.emissionRate > 0 ? 1 / this.options.emissionRate : Infinity;
     this.emissionTimer += deltaTime;
     
     while (this.emissionTimer >= emissionInterval && this.particleCount < this.options.maxParticles) {
@@ -213,20 +218,25 @@ export class GPUParticleSystem {
       }
     }
     
-    // Batch attribute updates - only update every 2 frames or when necessary
-    if (this.needsAttributeUpdate && (this.updateFrame % 2 === 0 || !hasActiveParticles)) {
-      this.geometry.attributes.position.needsUpdate = true;
-      this.geometry.attributes.size.needsUpdate = true;
-      
-      // Only update color every 3 frames
+    // Batch attribute updates - reduce frequency for better performance
+    if (this.needsAttributeUpdate) {
+      // Only update position every 3 frames
       if (this.updateFrame % 3 === 0) {
+        this.geometry.attributes.position.needsUpdate = true;
+      }
+      
+      // Only update size every 5 frames
+      if (this.updateFrame % 5 === 0) {
+        this.geometry.attributes.size.needsUpdate = true;
+      }
+      
+      // Only update color every 7 frames
+      if (this.updateFrame % 7 === 0) {
         this.geometry.attributes.color.needsUpdate = true;
       }
       
-      // Only compute bounding sphere every 5 frames
-      if (this.updateFrame % 5 === 0) {
-        this.geometry.computeBoundingSphere();
-      }
+      // Skip bounding sphere calculation entirely for particles
+      // this.geometry.computeBoundingSphere(); // REMOVED - not needed for particles
       
       this.needsAttributeUpdate = false;
     }

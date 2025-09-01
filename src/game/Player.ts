@@ -68,6 +68,17 @@ export class Player {
   private targetPosition: THREE.Vector3 = new THREE.Vector3();
   private smoothingFactor: number = 0.8; // Higher = more responsive
   
+  // Static texture cache to prevent regeneration
+  private static cachedHullTextures: any = null;
+  private static cachedWingTextures: any = null;
+  private static cachedEngineTextures: any = null;
+  
+  // Static objects for trail updates to prevent allocation
+  private static trailMatrix = new THREE.Matrix4();
+  private static trailQuaternion = new THREE.Quaternion();
+  private static trailScale = new THREE.Vector3();
+  private static trailColor = new THREE.Color();
+  
   // Memory management
   private eventListeners: Array<{ target: EventTarget, type: string, listener: EventListener }> = [];
   private timers: Set<number> = new Set();
@@ -96,8 +107,11 @@ export class Player {
   }
 
   private createModel(): void {
-    // Get battle-damaged AAA-quality ship hull textures for Skyrim-like weathered look
-    const hullTextures = this.textureManager.generateBattleDamagedHullTexture(512, 0.4);
+    // Use cached textures to prevent regeneration
+    if (!Player.cachedHullTextures) {
+      Player.cachedHullTextures = this.textureManager.generateBattleDamagedHullTexture(512, 0.4);
+    }
+    const hullTextures = Player.cachedHullTextures;
     
     // === MAIN FUSELAGE - Angular Space Fighter Design ===
     const fuselageGroup = new THREE.Group();
@@ -236,8 +250,11 @@ export class Player {
       bevelThickness: 0.02
     });
     
-    // Get damaged wing textures
-    const wingTextures = this.textureManager.generateBattleDamagedHullTexture(256, 0.6);
+    // Use cached wing textures
+    if (!Player.cachedWingTextures) {
+      Player.cachedWingTextures = this.textureManager.generateBattleDamagedHullTexture(256, 0.6);
+    }
+    const wingTextures = Player.cachedWingTextures;
     
     const wingMaterial = new THREE.MeshPhysicalMaterial({
       color: 0xff0066,
@@ -318,8 +335,11 @@ export class Player {
     
     // Main engine nozzles
     const nozzleGeometry = new THREE.CylinderGeometry(0.25, 0.35, 0.8, 8);
-    // Get heat-damaged engine textures
-    const engineTextures = this.textureManager.generateBattleDamagedHullTexture(256, 0.8);
+    // Use cached engine textures
+    if (!Player.cachedEngineTextures) {
+      Player.cachedEngineTextures = this.textureManager.generateBattleDamagedHullTexture(256, 0.8);
+    }
+    const engineTextures = Player.cachedEngineTextures;
     
     const nozzleMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x333333,
@@ -784,22 +804,19 @@ export class Player {
       }
       this.trailPositions[0].copy(this.position);
       
-      // Update instanced mesh
-      const matrix = new THREE.Matrix4();
-      const scale = new THREE.Vector3();
-      
+      // Update instanced mesh using cached static objects
       for (let i = 0; i < this.trailCount; i++) {
         const opacity = 1 - (i / this.trailCount);
         const scaleValue = 1 - (i / this.trailCount) * 0.7;
         
-        scale.setScalar(scaleValue);
-        matrix.compose(this.trailPositions[i], new THREE.Quaternion(), scale);
-        this.trailMesh.setMatrixAt(i, matrix);
+        // Reuse static objects instead of creating new ones
+        Player.trailScale.setScalar(scaleValue);
+        Player.trailMatrix.compose(this.trailPositions[i], Player.trailQuaternion, Player.trailScale);
+        this.trailMesh.setMatrixAt(i, Player.trailMatrix);
         
-        // Set color with opacity
-        const color = new THREE.Color(0x00ffff);
-        color.multiplyScalar(opacity);
-        this.trailMesh.setColorAt(i, color);
+        // Set color with opacity using cached object
+        Player.trailColor.setHex(0x00ffff).multiplyScalar(opacity);
+        this.trailMesh.setColorAt(i, Player.trailColor);
       }
       
       this.trailMesh.count = this.trailCount;
@@ -833,7 +850,7 @@ export class Player {
       )); // Behind the ship
       
       this.leftEngineTrail.setPosition(leftEnginePos);
-      this.leftEngineTrail.setEmissionRate(isMoving ? 120 * throttle : 10);
+      this.leftEngineTrail.setEmissionRate(isMoving ? 120 * throttle : 0); // 0 when not moving
       this.leftEngineTrail.setSizeFactor(0.5 + throttle * 0.8);
       this.leftEngineTrail.update(deltaTime, this.position);
     }
@@ -854,7 +871,7 @@ export class Player {
       )); // Behind the ship
       
       this.rightEngineTrail.setPosition(rightEnginePos);
-      this.rightEngineTrail.setEmissionRate(isMoving ? 120 * throttle : 10);
+      this.rightEngineTrail.setEmissionRate(isMoving ? 120 * throttle : 0); // 0 when not moving
       this.rightEngineTrail.setSizeFactor(0.5 + throttle * 0.8);
       this.rightEngineTrail.update(deltaTime, this.position);
     }
@@ -1159,20 +1176,22 @@ export class Player {
       
       this.scene.add(flash);
       
-      // Instant fade animation (no delays)
+      // Instant fade animation with tracked frame
       let opacity = 0.8;
+      let animFrameId: number | null = null;
       const fadeStep = () => {
         opacity -= 0.1;
         flashMaterial.opacity = Math.max(0, opacity);
         if (opacity > 0) {
-          requestAnimationFrame(fadeStep);
+          animFrameId = requestAnimationFrame(fadeStep);
         } else {
           this.scene.remove(flash);
           flashGeometry.dispose();
           flashMaterial.dispose();
+          if (animFrameId) cancelAnimationFrame(animFrameId);
         }
       };
-      requestAnimationFrame(fadeStep);
+      animFrameId = requestAnimationFrame(fadeStep);
     });
   }
   

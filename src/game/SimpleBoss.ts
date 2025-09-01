@@ -26,6 +26,21 @@ export class SimpleBoss {
   private damageAnimationIds: Set<number> = new Set();
   private lastAuraUpdate: number = 0;
   private auraUpdateInterval: number = 0.033; // ~30fps for aura
+  
+  // Particle pool for damage effects
+  private particlePool: { mesh: THREE.Mesh, geometry: THREE.BufferGeometry, material: THREE.Material }[] = [];
+  private activeParticles: Set<{ mesh: THREE.Mesh, velocity: THREE.Vector3, geometry: THREE.BufferGeometry, material: THREE.Material }> = new Set();
+  
+  // Cached mesh references to avoid traversal
+  private phaserMeshes: THREE.Mesh[] = [];
+  private deflectorMesh: THREE.Mesh | null = null;
+  private engineMeshes: THREE.Mesh[] = [];
+  private bridgeMesh: THREE.Mesh | null = null;
+  private warpNacelleMeshes: THREE.Mesh[] = [];
+  
+  // Static texture cache to prevent regeneration during evolve
+  private static cachedHullTextures: any = null;
+  private static cachedSaucerTextures: any = null;
 
   constructor(scene: THREE.Scene, level: number = 1) {
     this.scene = scene;
@@ -92,8 +107,11 @@ export class SimpleBoss {
     }
     hullGeometry.computeVertexNormals();
     
-    // High-quality metallic hull material
-    const hullTextures = this.textureManager.generateMetallicPanelTexture(512, 0.9);
+    // Use cached textures to prevent regeneration
+    if (!SimpleBoss.cachedHullTextures) {
+      SimpleBoss.cachedHullTextures = this.textureManager.generateMetallicPanelTexture(512, 0.9);
+    }
+    const hullTextures = SimpleBoss.cachedHullTextures;
     const hullMaterial = new THREE.MeshPhysicalMaterial({
       color: 0xa0a8b0,
       map: hullTextures.diffuse,
@@ -142,7 +160,11 @@ export class SimpleBoss {
     }
     saucerGeometry.computeVertexNormals();
     
-    const saucerTextures = this.textureManager.generateMetallicPanelTexture(1024, 0.92);
+    // Use cached textures for saucer
+    if (!SimpleBoss.cachedSaucerTextures) {
+      SimpleBoss.cachedSaucerTextures = this.textureManager.generateMetallicPanelTexture(1024, 0.92);
+    }
+    const saucerTextures = SimpleBoss.cachedSaucerTextures;
     const saucerMaterial = new THREE.MeshPhysicalMaterial({
       color: 0xb0b8c0,
       map: saucerTextures.diffuse,
@@ -246,6 +268,7 @@ export class SimpleBoss {
     dish.position.set(0, 0, 1.8);
     dish.rotation.x = Math.PI / 2;
     this.mesh.add(dish);
+    this.deflectorMesh = dish; // Cache reference
     
     // Deflector glow
     const dishLight = new THREE.PointLight(0x0088ff, 4 + this.level, 12);
@@ -266,6 +289,7 @@ export class SimpleBoss {
     const bridge = new THREE.Mesh(bridgeGeometry, bridgeMaterial);
     bridge.position.set(0, 0.6, 1.5);
     this.mesh.add(bridge);
+    this.bridgeMesh = bridge; // Cache reference
     
     // Bridge viewport
     const viewportGeometry = new THREE.BoxGeometry(0.5, 0.06, 0.25);
@@ -300,11 +324,13 @@ export class SimpleBoss {
     const upperPhaser = new THREE.Mesh(phaserGeometry, phaserMaterial);
     upperPhaser.position.set(0, 0.45, 1.2);
     this.mesh.add(upperPhaser);
+    this.phaserMeshes.push(upperPhaser); // Cache reference
     
     // Lower array
     const lowerPhaser = new THREE.Mesh(phaserGeometry, phaserMaterial.clone());
     lowerPhaser.position.set(0, -0.45, 1.2);
     this.mesh.add(lowerPhaser);
+    this.phaserMeshes.push(lowerPhaser); // Cache reference
   }
   
   private createWindowArrays(): void {
@@ -401,6 +427,7 @@ export class SimpleBoss {
       engine.position.set((i - 0.5) * 1.0, 0, -2.2);
       engine.rotation.x = Math.PI / 2;
       this.mesh.add(engine);
+      this.engineMeshes.push(engine); // Cache reference
       
       // Engine light
       const engineLight = new THREE.PointLight(0xff6600, 2 + this.level, 8);
@@ -518,27 +545,32 @@ export class SimpleBoss {
     // Update engine glow intensity
     this.updateEngineGlows(deltaTime);
     
-    // Update phaser array glow when attacking
-    this.mesh.traverse(child => {
-      if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshPhysicalMaterial) {
-        // Pulse phaser arrays
-        if (child.material.emissive && child.material.emissive.getHex() === 0xff4400) {
-          if (this.isAttacking) {
-            child.material.emissiveIntensity = 1.0 + Math.sin(this.time * 15) * 0.5;
-          } else {
-            child.material.emissiveIntensity = 0.4 + this.phase * 0.2;
-          }
+    // Update cached mesh emissive intensities directly (no traversal)
+    // Update phaser arrays
+    this.phaserMeshes.forEach(mesh => {
+      if (mesh.material && (mesh.material as THREE.MeshPhysicalMaterial).emissive) {
+        const mat = mesh.material as THREE.MeshPhysicalMaterial;
+        if (this.isAttacking) {
+          mat.emissiveIntensity = 1.0 + Math.sin(this.time * 15) * 0.5;
+        } else {
+          mat.emissiveIntensity = 0.4 + this.phase * 0.2;
         }
-        
-        // Pulse deflector dish
-        if (child.material.emissive && child.material.emissive.getHex() === 0x0066ff) {
-          child.material.emissiveIntensity = 2.5 + Math.sin(this.time * 3) * 0.5;
-        }
-        
-        // Pulse engine glow
-        if (child.material.emissive && child.material.emissive.getHex() === 0xff3300) {
-          child.material.emissiveIntensity = 2.0 + this.phase * 0.5 + Math.sin(this.time * 5) * 0.3;
-        }
+      }
+    });
+    
+    // Update deflector dish
+    if (this.deflectorMesh && this.deflectorMesh.material) {
+      const mat = this.deflectorMesh.material as THREE.MeshPhysicalMaterial;
+      if (mat.emissive) {
+        mat.emissiveIntensity = 2.5 + Math.sin(this.time * 3) * 0.5;
+      }
+    }
+    
+    // Update engine glows
+    this.engineMeshes.forEach(mesh => {
+      if (mesh.material && (mesh.material as THREE.MeshPhysicalMaterial).emissive) {
+        const mat = mesh.material as THREE.MeshPhysicalMaterial;
+        mat.emissiveIntensity = 2.0 + this.phase * 0.5 + Math.sin(this.time * 5) * 0.3;
       }
     });
     
@@ -630,9 +662,8 @@ export class SimpleBoss {
         baseDirection.x * Math.sin(spreadAngle) + baseDirection.z * Math.cos(spreadAngle)
       ).normalize();
       
-      // Add torpedo glow
-      const torpedoLight = new THREE.PointLight(0xff6600, 1.5, 4);
-      torpedo.add(torpedoLight);
+      // REMOVED: PointLight causes memory leak and GPU exhaustion
+      // Visual effect handled by emissive material instead
       
       torpedo.userData = {
         velocity: direction.multiplyScalar(25 + this.phase * 5),
@@ -769,19 +800,36 @@ export class SimpleBoss {
     const particleCount = 10; // Reduced from 20
     const particles: { mesh: THREE.Mesh, velocity: THREE.Vector3, geometry: THREE.BufferGeometry, material: THREE.Material }[] = [];
     
-    // Create sparks and debris
+    // Initialize particle pool if needed
+    if (this.particlePool.length < particleCount) {
+      const needed = particleCount - this.particlePool.length;
+      for (let i = 0; i < needed; i++) {
+        const particleGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+        const particleMaterial = new THREE.MeshBasicMaterial({
+          transparent: true,
+          opacity: 0.9
+        });
+        const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+        this.particlePool.push({ mesh: particle, geometry: particleGeometry, material: particleMaterial });
+      }
+    }
+    
+    // Reuse particles from pool
     for (let i = 0; i < particleCount; i++) {
-      const particleGeometry = new THREE.BoxGeometry(0.08 + Math.random() * 0.12, 0.08 + Math.random() * 0.12, 0.08 + Math.random() * 0.12);
-      const particleMaterial = new THREE.MeshBasicMaterial({
-        color: i < particleCount / 2 ? 
-          new THREE.Color(0xffaa00) : // Orange sparks
-          new THREE.Color(0x808080),  // Metal debris
-        transparent: true,
-        opacity: 0.9
-      });
+      const poolItem = this.particlePool[i];
+      const particle = poolItem.mesh;
+      const material = poolItem.material as THREE.MeshBasicMaterial;
       
-      const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+      // Reset particle properties
+      particle.scale.set(
+        0.8 + Math.random() * 0.4,
+        0.8 + Math.random() * 0.4,
+        0.8 + Math.random() * 0.4
+      );
+      material.color.setHex(i < particleCount / 2 ? 0xffaa00 : 0x808080);
+      material.opacity = 0.9;
       particle.position.copy(this.position);
+      particle.visible = true;
       
       const velocity = new THREE.Vector3(
         (Math.random() - 0.5) * 10,
@@ -790,7 +838,7 @@ export class SimpleBoss {
       );
       
       this.scene.add(particle);
-      particles.push({ mesh: particle, velocity, geometry: particleGeometry, material: particleMaterial });
+      particles.push({ mesh: particle, velocity, geometry: poolItem.geometry, material: poolItem.material });
     }
     
     // Single animation loop for all particles
@@ -809,11 +857,11 @@ export class SimpleBoss {
         const animId = requestAnimationFrame(animate);
         this.damageAnimationIds.add(animId);
       } else {
-        // Cleanup all particles at once
+        // Return particles to pool
         particles.forEach(p => {
           this.scene.remove(p.mesh);
-          p.geometry.dispose();
-          p.material.dispose();
+          p.mesh.visible = false;
+          // Don't dispose - keep in pool for reuse
         });
         this.damageAnimationIds.forEach(id => cancelAnimationFrame(id));
         this.damageAnimationIds.clear();
