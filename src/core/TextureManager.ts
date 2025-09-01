@@ -451,6 +451,183 @@ export class TextureManager {
     };
   }
   
+  public generateMetallicPanelTexture(size: number = 512, metalness: number = 0.9): {
+    diffuse: THREE.CanvasTexture;
+    normal: THREE.CanvasTexture;
+    roughness: THREE.CanvasTexture;
+    metalness: THREE.CanvasTexture;
+    ao: THREE.CanvasTexture;
+  } {
+    // Create diffuse texture with panel details
+    const diffuseCanvas = this.createMetallicPanelDiffuse(size);
+    const diffuseTexture = new THREE.CanvasTexture(diffuseCanvas);
+    
+    // Create normal map for panel depth
+    const normalCanvas = this.createMetallicPanelNormal(size);
+    const normalTexture = new THREE.CanvasTexture(normalCanvas);
+    
+    // Create roughness map
+    const roughnessCanvas = document.createElement('canvas');
+    roughnessCanvas.width = size;
+    roughnessCanvas.height = size;
+    const roughCtx = roughnessCanvas.getContext('2d')!;
+    
+    // Metallic panels are generally smooth with some variation
+    roughCtx.fillStyle = `rgb(${Math.floor(25)}, ${Math.floor(25)}, ${Math.floor(25)})`;
+    roughCtx.fillRect(0, 0, size, size);
+    
+    // Add some roughness variation
+    for (let i = 0; i < 100; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const radius = Math.random() * 10 + 5;
+      const gradient = roughCtx.createRadialGradient(x, y, 0, x, y, radius);
+      gradient.addColorStop(0, `rgba(80, 80, 80, 0.3)`);
+      gradient.addColorStop(1, `rgba(80, 80, 80, 0)`);
+      roughCtx.fillStyle = gradient;
+      roughCtx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+    }
+    
+    const roughnessTexture = new THREE.CanvasTexture(roughnessCanvas);
+    
+    // Create metalness map
+    const metalnessCanvas = document.createElement('canvas');
+    metalnessCanvas.width = size;
+    metalnessCanvas.height = size;
+    const metalCtx = metalnessCanvas.getContext('2d')!;
+    
+    const metalValue = Math.floor(metalness * 255);
+    metalCtx.fillStyle = `rgb(${metalValue}, ${metalValue}, ${metalValue})`;
+    metalCtx.fillRect(0, 0, size, size);
+    
+    const metalnessTexture = new THREE.CanvasTexture(metalnessCanvas);
+    
+    // Create ambient occlusion map
+    const aoCanvas = this.createMetallicPanelAO(size);
+    const aoTexture = new THREE.CanvasTexture(aoCanvas);
+    
+    return {
+      diffuse: diffuseTexture,
+      normal: normalTexture,
+      roughness: roughnessTexture,
+      metalness: metalnessTexture,
+      ao: aoTexture
+    };
+  }
+  
+  private createMetallicPanelDiffuse(size: number): HTMLCanvasElement {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    
+    // Base metallic color
+    const gradient = ctx.createLinearGradient(0, 0, size, size);
+    gradient.addColorStop(0, '#a8b0b8');
+    gradient.addColorStop(0.5, '#9098a0');
+    gradient.addColorStop(1, '#808890');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+    
+    // Panel lines
+    ctx.strokeStyle = '#606870';
+    ctx.lineWidth = 2;
+    
+    // Grid pattern for hull panels
+    const panelSize = size / 8;
+    for (let x = 0; x < size; x += panelSize) {
+      for (let y = 0; y < size; y += panelSize) {
+        ctx.strokeRect(x, y, panelSize, panelSize);
+        
+        // Add detail within panels
+        if (Math.random() > 0.5) {
+          ctx.globalAlpha = 0.3;
+          ctx.fillStyle = '#707880';
+          ctx.fillRect(x + 4, y + 4, panelSize - 8, panelSize - 8);
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+    
+    // Add rivets
+    ctx.fillStyle = '#505860';
+    for (let x = 0; x < size; x += panelSize) {
+      for (let y = 0; y < size; y += panelSize) {
+        ctx.beginPath();
+        ctx.arc(x, y, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    
+    return canvas;
+  }
+  
+  private createMetallicPanelNormal(size: number): HTMLCanvasElement {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    
+    // Neutral normal map base
+    ctx.fillStyle = 'rgb(128, 128, 255)';
+    ctx.fillRect(0, 0, size, size);
+    
+    // Panel edges
+    const panelSize = size / 8;
+    ctx.strokeStyle = 'rgb(100, 100, 255)';
+    ctx.lineWidth = 3;
+    
+    for (let x = 0; x < size; x += panelSize) {
+      for (let y = 0; y < size; y += panelSize) {
+        // Create depth effect
+        ctx.strokeRect(x, y, panelSize, panelSize);
+        
+        // Inner bevel
+        ctx.strokeStyle = 'rgb(156, 156, 255)';
+        ctx.strokeRect(x + 2, y + 2, panelSize - 4, panelSize - 4);
+        ctx.strokeStyle = 'rgb(100, 100, 255)';
+      }
+    }
+    
+    return canvas;
+  }
+  
+  private createMetallicPanelAO(size: number): HTMLCanvasElement {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    
+    // Base ambient occlusion
+    ctx.fillStyle = 'rgb(200, 200, 200)';
+    ctx.fillRect(0, 0, size, size);
+    
+    // Darken panel edges
+    const panelSize = size / 8;
+    ctx.strokeStyle = 'rgb(150, 150, 150)';
+    ctx.lineWidth = 4;
+    
+    for (let x = 0; x < size; x += panelSize) {
+      for (let y = 0; y < size; y += panelSize) {
+        ctx.strokeRect(x, y, panelSize, panelSize);
+      }
+    }
+    
+    // Add shadow spots
+    for (let i = 0; i < 20; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const radius = Math.random() * 20 + 10;
+      const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+      gradient.addColorStop(0, 'rgba(100, 100, 100, 0.3)');
+      gradient.addColorStop(1, 'rgba(100, 100, 100, 0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+    }
+    
+    return canvas;
+  }
+  
   private createBattleDamagedDiffuse(size: number, damageLevel: number): HTMLCanvasElement {
     const canvas = document.createElement('canvas');
     canvas.width = size;

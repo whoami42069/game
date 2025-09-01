@@ -41,6 +41,10 @@ export class CombatFeedbackManager {
   // Time scale for hitstop effects
   private timeScale: number = 1;
   
+  // Animation tracking
+  private activeAnimations: Set<number> = new Set();
+  private maxActiveParticles: number = 5;
+  
   constructor(scene: THREE.Scene, camera: THREE.Camera, renderer: THREE.WebGLRenderer) {
     this.scene = scene;
     this.camera = camera;
@@ -115,7 +119,17 @@ export class CombatFeedbackManager {
    * Create impact particles at hit location
    */
   public createImpactParticles(position: THREE.Vector3, color: THREE.Color = new THREE.Color(0xffaa00), count: number = 8): void {
-    for (let i = 0; i < count; i++) {
+    // Limit active particle animations
+    if (this.activeAnimations.size > this.maxActiveParticles) {
+      return;
+    }
+    
+    // Reduce particle count for performance
+    const actualCount = Math.min(count, 5);
+    const particles: { mesh: THREE.Mesh, velocity: THREE.Vector3, geometry: THREE.BufferGeometry, material: THREE.Material }[] = [];
+    
+    // Create all particles first
+    for (let i = 0; i < actualCount; i++) {
       const particleGeometry = new THREE.SphereGeometry(0.1, 4, 4);
       const particleMaterial = new THREE.MeshBasicMaterial({
         color: color,
@@ -123,51 +137,61 @@ export class CombatFeedbackManager {
         opacity: 1
       });
       const particle = new THREE.Mesh(particleGeometry, particleMaterial);
-      
       particle.position.copy(position);
-      this.scene.add(particle);
       
-      // Random velocity for particle spread
       const velocity = new THREE.Vector3(
         (Math.random() - 0.5) * 10,
         Math.random() * 5,
         (Math.random() - 0.5) * 10
       );
       
-      const gravity = new THREE.Vector3(0, -9.8, 0);
-      const startTime = performance.now();
-      const lifetime = 500 + Math.random() * 500;
-      
-      const animate = () => {
-        const elapsed = performance.now() - startTime;
-        if (elapsed < lifetime) {
-          const deltaTime = 0.016; // 60fps
-          
-          // Apply physics
-          velocity.add(gravity.clone().multiplyScalar(deltaTime));
-          particle.position.add(velocity.clone().multiplyScalar(deltaTime));
-          
-          // Fade out
-          const life = 1 - (elapsed / lifetime);
-          particleMaterial.opacity = life;
-          particle.scale.setScalar(life);
-          
-          requestAnimationFrame(animate);
-        } else {
-          this.scene.remove(particle);
-          particleGeometry.dispose();
-          particleMaterial.dispose();
-        }
-      };
-      requestAnimationFrame(animate);
+      this.scene.add(particle);
+      particles.push({ mesh: particle, velocity, geometry: particleGeometry, material: particleMaterial });
     }
+    
+    // Single animation loop for all particles
+    const gravity = new THREE.Vector3(0, -9.8, 0);
+    const startTime = performance.now();
+    const lifetime = 300; // Reduced lifetime
+    
+    const animate = () => {
+      const elapsed = performance.now() - startTime;
+      if (elapsed < lifetime) {
+        const deltaTime = 0.016;
+        const life = 1 - (elapsed / lifetime);
+        
+        particles.forEach(p => {
+          p.velocity.add(gravity.clone().multiplyScalar(deltaTime));
+          p.mesh.position.add(p.velocity.clone().multiplyScalar(deltaTime));
+          (p.material as THREE.MeshBasicMaterial).opacity = life;
+          p.mesh.scale.setScalar(life);
+        });
+        
+        const animId = requestAnimationFrame(animate);
+        this.activeAnimations.add(animId);
+      } else {
+        // Cleanup all particles at once
+        particles.forEach(p => {
+          this.scene.remove(p.mesh);
+          p.geometry.dispose();
+          p.material.dispose();
+        });
+        this.activeAnimations.clear();
+      }
+    };
+    animate();
   }
   
   /**
    * Create shockwave effect at impact location
    */
   public createShockwave(position: THREE.Vector3, color: THREE.Color = new THREE.Color(0x00ffff), maxRadius: number = 5): void {
-    const shockwaveGeometry = new THREE.RingGeometry(0.1, 0.2, 32);
+    // Limit shockwave effects
+    if (this.activeAnimations.size > 3) {
+      return;
+    }
+    
+    const shockwaveGeometry = new THREE.RingGeometry(0.1, 0.2, 16); // Reduced segments
     const shockwaveMaterial = new THREE.MeshBasicMaterial({
       color: color,
       transparent: true,
@@ -181,7 +205,8 @@ export class CombatFeedbackManager {
     this.scene.add(shockwave);
     
     const startTime = performance.now();
-    const duration = 300;
+    const duration = 200; // Reduced duration
+    let animId: number;
     
     const animate = () => {
       const elapsed = performance.now() - startTime;
@@ -193,11 +218,13 @@ export class CombatFeedbackManager {
         shockwave.scale.setScalar(scale);
         shockwaveMaterial.opacity = opacity;
         
-        requestAnimationFrame(animate);
+        animId = requestAnimationFrame(animate);
+        this.activeAnimations.add(animId);
       } else {
         this.scene.remove(shockwave);
         shockwaveGeometry.dispose();
         shockwaveMaterial.dispose();
+        if (animId) this.activeAnimations.delete(animId);
       }
     };
     requestAnimationFrame(animate);

@@ -7,6 +7,7 @@ import { UIManager } from '@/ui/UIManager';
 import { SpaceArena } from '@/game/SpaceArena';
 import { Player } from '@/game/Player';
 import { SimpleBoss } from '@/game/SimpleBoss';
+import { Minion } from '@/game/Minion';
 import { ItemDrop, ItemType } from '@/game/ItemDrop';
 import { Inventory } from '@/game/Inventory';
 import { GameUI } from '@/ui/GameUI';
@@ -73,6 +74,9 @@ export class Game {
   private arena: SpaceArena | null = null;
   private player: Player | null = null;
   private boss: SimpleBoss | null = null;
+  private minions: Minion[] = [];
+  private lastMinionSpawnTime: number = 0;
+  private minionSpawnInterval: number = 20000; // 20 seconds
   private projectiles: THREE.Mesh[] = [];
   private itemDrops: ItemDrop[] = [];
   private inventory: Inventory | null = null;
@@ -91,6 +95,31 @@ export class Game {
   private animationFrames: Set<number> = new Set();
   private createdElements: HTMLElement[] = [];
   private eventListeners: Array<{ target: EventTarget, type: string, listener: EventListener }> = [];
+  
+  // Track safe timer/interval wrappers
+  private safeSetTimeout(callback: () => void, delay: number): number {
+    const id = setTimeout(() => {
+      this.timers.delete(id);
+      callback();
+    }, delay) as any;
+    this.timers.add(id);
+    return id;
+  }
+  
+  private safeSetInterval(callback: () => void, delay: number): number {
+    const id = setInterval(callback, delay) as any;
+    this.intervals.add(id);
+    return id;
+  }
+  
+  private trackAnimationFrame(callback: FrameRequestCallback): number {
+    const id = requestAnimationFrame((time) => {
+      this.animationFrames.delete(id);
+      callback(time);
+    });
+    this.animationFrames.add(id);
+    return id;
+  }
   
   // Missing properties referenced in code - using mock implementations
   private memoryManager: any = {
@@ -332,7 +361,7 @@ export class Game {
       </div>
       <div style="font-size: 0.9em; color: #666;">
         <p>Each boss kill increases difficulty</p>
-        <p>Score: 100 points per hit, 10k per boss kill</p>
+        <p>Score: 10 pts/hit (x2-x5 combo), 100 pts/wave</p>
       </div>
       <style>
         @keyframes glow {
@@ -360,6 +389,8 @@ export class Game {
     this.score = 0;
     this.bossLevel = 1;
     this.comboMultiplier = 1;
+    this.lastMinionSpawnTime = Date.now();
+    this.minions = [];
     
     // Initialize game entities
     this.arena = new SpaceArena(this.scene);
@@ -437,7 +468,7 @@ export class Game {
   private victory(): void {
     // Boss defeated, evolve and continue
     this.bossLevel++;
-    this.score += 10000; // Fixed 10k points per boss kill
+    this.score += 100; // Wave clear bonus: 100 points
     
     // Drop items visually on boss defeat
     if (this.boss) {
@@ -610,9 +641,15 @@ export class Game {
     }
     
     if (this.boss) {
-      // Boss should have dispose method
+      this.boss.dispose();
       this.boss = null;
     }
+    
+    // Dispose minions
+    for (const minion of this.minions) {
+      minion.dispose();
+    }
+    this.minions = [];
     
     if (this.arena) {
       // Arena should have dispose method
@@ -736,6 +773,7 @@ export class Game {
     
     this.stats.end();
     
+    // Use single animation frame loop
     this.animationId = requestAnimationFrame(() => this.gameLoop());
   }
 
@@ -767,24 +805,13 @@ export class Game {
       if (this.player && this.arena) {
         this.player.update(modifiedDeltaTime, this.arena.getBounds(), this.camera, this.inputManager);
         
-        // Handle shooting (use pooled projectiles for better performance)
+        // Handle shooting - directly use projectiles since pool returns null
         const projectiles = this.player.shoot(this.inputManager);
         if (projectiles) {
           for (const proj of projectiles) {
-            const pooledProj = this.objectPoolManager.projectilePool.get();
-            if (pooledProj) {
-              const velocity = proj.userData.velocity as THREE.Vector3;
-              const damage = proj.userData.damage || 10;
-              const owner = proj.userData.owner || 'player';
-              
-              pooledProj.initialize(proj.position, velocity, damage, owner, 5);
-              this.scene.add(pooledProj.mesh);
-              this.pooledProjectiles.push(pooledProj);
-            }
-            // Clean up the temporary projectile
-            this.scene.remove(proj);
-            this.memoryManager.trackGeometry(proj.geometry).dispose();
-            this.memoryManager.trackMaterial(proj.material as THREE.Material).dispose();
+            // Since object pool returns null, add projectiles directly
+            this.projectiles.push(proj);
+            this.scene.add(proj);
           }
         }
       }
@@ -793,24 +820,42 @@ export class Game {
       if (this.boss && this.player && this.arena) {
         this.boss.update(modifiedDeltaTime, this.player.position, this.arena.getBounds());
         
-        // Boss attacks (use pooled projectiles for better performance)
+        // Boss attacks - directly use projectiles since pool returns null
         const bossProjectiles = this.boss.shoot();
         if (bossProjectiles) {
           for (const proj of bossProjectiles) {
-            const pooledProj = this.objectPoolManager.projectilePool.get();
-            if (pooledProj) {
-              const velocity = proj.userData.velocity as THREE.Vector3;
-              const damage = proj.userData.damage || 10;
-              const owner = proj.userData.owner || 'boss';
-              
-              pooledProj.initialize(proj.position, velocity, damage, owner, 5);
-              this.scene.add(pooledProj.mesh);
-              this.pooledProjectiles.push(pooledProj);
+            // Since object pool returns null, add projectiles directly
+            this.projectiles.push(proj);
+            this.scene.add(proj);
+          }
+        }
+      }
+      
+      // Spawn minions every 20 seconds
+      const currentTime = Date.now();
+      if (currentTime - this.lastMinionSpawnTime >= this.minionSpawnInterval) {
+        this.spawnMinion();
+        this.lastMinionSpawnTime = currentTime;
+      }
+      
+      // Update minions
+      if (this.player) {
+        for (let i = this.minions.length - 1; i >= 0; i--) {
+          const minion = this.minions[i];
+          minion.update(this.player.position, modifiedDeltaTime);
+          
+          // Check if minion projectiles hit player
+          if (minion.checkProjectileCollision(this.player.mesh)) {
+            this.player.takeDamage(5); // Minion projectile damage
+            if (this.combatFeedbackManager) {
+              this.combatFeedbackManager.triggerHitStop({ duration: 50, intensity: 0.3 });
+              this.combatFeedbackManager.triggerScreenShake({ intensity: 1, duration: 100 });
             }
-            // Clean up the temporary projectile
-            this.scene.remove(proj);
-            this.memoryManager.trackGeometry(proj.geometry).dispose();
-            this.memoryManager.trackMaterial(proj.material as THREE.Material).dispose();
+          }
+          
+          // Remove dead minions
+          if (minion.getIsDead()) {
+            this.minions.splice(i, 1);
           }
         }
       }
@@ -841,7 +886,7 @@ export class Game {
         this.gameUI.updateBossHealth(this.boss);
         this.gameUI.updateScore(this.score);
         this.gameUI.updateWave(this.bossLevel);
-        // this.gameUI.updateCombo(this.comboMultiplier); // Method not implemented
+        this.gameUI.updateCombo(this.comboMultiplier);
         this.gameUI.updateInventory(this.inventory);
         
         // Update FPS display
@@ -876,17 +921,13 @@ export class Game {
       if (this.boss && this.boss.health <= 0 && this.boss.mesh.visible) {
         // Mark boss as defeated to prevent multiple victory calls
         this.boss.mesh.visible = false;
-        // Delay victory call to next frame to prevent freezing
-        requestAnimationFrame(() => {
+        // Use safe timeout to prevent freezing
+        this.safeSetTimeout(() => {
           this.victory();
-        });
+        }, 100);
       }
       
-      // Update combo multiplier
-      const now = Date.now();
-      if (now - this.lastHitTime > 3000) {
-        this.comboMultiplier = 1;
-      }
+      // Combo multiplier now resets automatically in handlePlayerHit method
     }
   }
   
@@ -908,7 +949,7 @@ export class Game {
         this.gameUI.updateBossHealth(this.boss);
         this.gameUI.updateScore(this.score);
         this.gameUI.updateWave(this.bossLevel);
-        // this.gameUI.updateCombo(this.comboMultiplier); // Method not implemented
+        this.gameUI.updateCombo(this.comboMultiplier);
         this.gameUI.updateInventory(this.inventory);
         
         // Update FPS display
@@ -968,6 +1009,30 @@ export class Game {
     }
   }
 
+  private spawnMinion(): void {
+    if (!this.arena) return;
+    
+    const bounds = this.arena.getBounds();
+    const radius = (bounds as any)?.radius || 20;
+    
+    // Spawn at random position within arena
+    const angle = Math.random() * Math.PI * 2;
+    const distance = Math.random() * (radius - 5) + 5; // Keep away from center and edges
+    
+    const position = new THREE.Vector3(
+      Math.cos(angle) * distance,
+      1, // Match player height
+      Math.sin(angle) * distance
+    );
+    
+    const minion = new Minion(this.scene, position);
+    this.minions.push(minion);
+    
+    if (this.gameUI) {
+      this.gameUI.showNotification('Minion Spawned!', '#ff00ff', 1000);
+    }
+  }
+
   private checkCollisions(): void {
     if (!this.player || !this.boss) return;
     
@@ -994,6 +1059,46 @@ export class Game {
             }
           }
           this.projectiles.splice(i, 1);
+        }
+        
+        // Check collision with minions
+        for (let j = this.minions.length - 1; j >= 0; j--) {
+          const minion = this.minions[j];
+          if (!minion.getIsDead()) {
+            const minionDistance = projectile.position.distanceTo(minion.getPosition());
+            if (minionDistance < 1.5) {
+              // Minions die in 1 hit
+              if (minion.takeDamage(1)) {
+                // Apply combo system for minion kills too
+                const now = Date.now();
+                if (now - this.lastHitTime <= 1000) {
+                  this.comboMultiplier = Math.min(5, this.comboMultiplier + 1);
+                } else {
+                  this.comboMultiplier = 1;
+                }
+                const points = 10 * this.comboMultiplier;
+                this.score += points;
+                this.lastHitTime = now;
+                if (this.gameUI) {
+                  this.gameUI.showNotification(`+${points}`, '#ffff00', 500);
+                  this.gameUI.updateCombo(this.comboMultiplier);
+                }
+              }
+              
+              // Remove projectile
+              this.scene.remove(projectile);
+              this.memoryManager.trackGeometry(projectile.geometry).dispose();
+              if (projectile.material) {
+                if (Array.isArray(projectile.material)) {
+                  projectile.material.forEach(m => this.memoryManager.trackMaterial(m).dispose());
+                } else {
+                  this.memoryManager.trackMaterial(projectile.material as THREE.Material).dispose();
+                }
+              }
+              this.projectiles.splice(i, 1);
+              break;
+            }
+          }
         }
       } else if (owner === 'boss') {
         // Check collision with player
@@ -1050,13 +1155,30 @@ export class Game {
   private handlePlayerHit(damage: number, hitPosition: THREE.Vector3): void {
     try {
       this.boss?.takeDamage(damage);
-      this.score += 100; // Fixed 100 points per hit
-      this.comboMultiplier = Math.min(16, this.comboMultiplier + 1);
-      this.lastHitTime = Date.now();
+      
+      // Update combo multiplier
+      const now = Date.now();
+      if (now - this.lastHitTime <= 1000) {
+        // Within 1 second - increase multiplier up to x5
+        this.comboMultiplier = Math.min(5, this.comboMultiplier + 1);
+      } else {
+        // Reset multiplier if more than 1 second has passed
+        this.comboMultiplier = 1;
+      }
+      
+      // Apply score: 10 points per hit * combo multiplier
+      const points = 10 * this.comboMultiplier;
+      this.score += points;
+      this.lastHitTime = now;
       
       // INSTANT COMBAT FEEDBACK - No delays!
       if (this.combatFeedbackManager) {
         // this.combatFeedbackManager.triggerComboHit(this.comboMultiplier, hitPosition); // Method not implemented
+      }
+      
+      // Update combo display
+      if (this.gameUI) {
+        this.gameUI.updateCombo(this.comboMultiplier);
       }
       
       // 2% chance to drop item on every hit

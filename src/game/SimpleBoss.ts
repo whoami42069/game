@@ -19,9 +19,13 @@ export class SimpleBoss {
   private nucleus!: THREE.Mesh;
   private time: number = 0;
   private originalSpawnPosition: THREE.Vector3;
-  private crystallineShards: THREE.Mesh[] = [];
+  // private crystallineShards: THREE.Mesh[] = []; // Removed - using spacecraft model now
   private corruptionAura: THREE.Points | null = null;
   private textureManager: TextureManager;
+  private attackAnimationId: number | null = null;
+  private damageAnimationIds: Set<number> = new Set();
+  private lastAuraUpdate: number = 0;
+  private auraUpdateInterval: number = 0.033; // ~30fps for aura
 
   constructor(scene: THREE.Scene, level: number = 1) {
     this.scene = scene;
@@ -45,104 +49,368 @@ export class SimpleBoss {
   }
 
   private createAtomModel(): void {
-    // Create crystalline core instead of simple sphere
-    const nucleusGeometry = new THREE.IcosahedronGeometry(2 + this.level * 0.2, 1);
+    // Create Star Trek Federation-style starship
+    this.createEngineeringHull();
+    this.createSaucerSection();
+    this.createWarpNacelles();
+    this.createDeflectorDish();
+    this.createBridge();
+    this.createPhaserArrays();
+    this.createWindowArrays();
+    this.createHullDetails();
+    this.createEngineGlows();
+    this.createWarpPlasmaTrails();
+  }
+  
+  private createEngineeringHull(): void {
+    // Secondary hull - elongated cylindrical shape
+    const hullGeometry = new THREE.CylinderGeometry(
+      1.2,  // top radius
+      1.5,  // bottom radius
+      4,    // height
+      16,   // radial segments
+      4     // height segments
+    );
     
-    // Get crystalline textures
-    const crystalTextures = this.textureManager.generateCrystallineTexture(256, this.level / 5);
+    // Transform vertices for more spacecraft-like shape
+    const positionAttribute = hullGeometry.attributes.position;
+    for (let i = 0; i < positionAttribute.count; i++) {
+      const x = positionAttribute.getX(i);
+      const y = positionAttribute.getY(i);
+      const z = positionAttribute.getZ(i);
+      
+      // Flatten the hull (make it wider than tall)
+      positionAttribute.setX(i, x * 1.2);
+      positionAttribute.setZ(i, z * 0.7);
+      
+      // Taper the front
+      if (y > 1) {
+        const taper = 1 - (y - 1) / 3 * 0.4;
+        positionAttribute.setX(i, x * taper * 1.2);
+        positionAttribute.setZ(i, z * taper * 0.7);
+      }
+    }
+    hullGeometry.computeVertexNormals();
     
-    const nucleusMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x8800cc,
-      map: crystalTextures.diffuse,
-      normalMap: crystalTextures.normal,
+    // High-quality metallic hull material
+    const hullTextures = this.textureManager.generateMetallicPanelTexture(512, 0.9);
+    const hullMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xa0a8b0,
+      map: hullTextures.diffuse,
+      normalMap: hullTextures.normal,
       normalScale: new THREE.Vector2(1.5, 1.5),
-      roughnessMap: crystalTextures.roughness,
-      metalnessMap: crystalTextures.metalness,
-      emissiveMap: crystalTextures.emissive,
-      emissive: new THREE.Color(0xff00ff),
-      emissiveIntensity: 0.5 + this.level * 0.15,
-      metalness: 0.3,
-      roughness: 0.1,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.0,
-      transmission: 0.3,
-      thickness: 0.5,
-      ior: 2.4,
-      attenuationColor: new THREE.Color(0x660099),
-      attenuationDistance: 1.0,
-      envMapIntensity: 2.0,
-      specularIntensity: 2.0,
-      specularColor: new THREE.Color(0xff00ff),
-      sheen: 0.5,
-      sheenRoughness: 0.2,
-      sheenColor: new THREE.Color(0xff66ff)
+      roughnessMap: hullTextures.roughness,
+      metalnessMap: hullTextures.metalness,
+      aoMap: hullTextures.ao,
+      metalness: 0.85,
+      roughness: 0.2,
+      clearcoat: 0.3,
+      clearcoatRoughness: 0.05,
+      envMapIntensity: 1.8,
+      reflectivity: 0.8
     });
     
-    this.nucleus = new THREE.Mesh(nucleusGeometry, nucleusMaterial);
+    this.nucleus = new THREE.Mesh(hullGeometry, hullMaterial);
+    this.nucleus.rotation.z = Math.PI / 2;
+    this.nucleus.position.set(0, 0, -1);
     this.nucleus.castShadow = true;
     this.nucleus.receiveShadow = true;
     this.mesh.add(this.nucleus);
     
-    // Enhanced glow with pulsing effect
-    const glowLight = new THREE.PointLight(0xff00ff, 3 + this.level, 20);
-    glowLight.decay = 2;
-    this.nucleus.add(glowLight);
-    
-    // Add orbiting crystal shards
-    this.createCrystalShards();
-    
-    // Add corruption aura particle system
-    this.createCorruptionAura();
+    // Hull lighting
+    const hullLight = new THREE.PointLight(0x4488ff, 2, 15);
+    hullLight.position.set(0, 0, 0);
+    this.nucleus.add(hullLight);
   }
   
-  private createCrystalShards(): void {
-    const shardCount = 6 + this.level * 2;
-    const shardGeometry = new THREE.OctahedronGeometry(0.3 + this.level * 0.05, 0);
+  private createSaucerSection(): void {
+    // Primary saucer section
+    const saucerRadius = 3;
+    const saucerGeometry = new THREE.CylinderGeometry(
+      saucerRadius * 0.4,
+      saucerRadius,
+      0.8,
+      32,
+      1
+    );
     
-    for (let i = 0; i < shardCount; i++) {
-      const shardMaterial = new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color().setHSL(0.8 + Math.random() * 0.1, 1, 0.5),
-        emissive: new THREE.Color(0xaa00ff),
-        emissiveIntensity: 0.3 + Math.random() * 0.3,
-        metalness: 0.2,
-        roughness: 0.0,
-        clearcoat: 1.0,
-        clearcoatRoughness: 0.0,
-        transmission: 0.9,
-        thickness: 0.2,
-        ior: 2.0,
-        envMapIntensity: 3.0,
-        transparent: true,
-        opacity: 0.9
+    // Flatten for saucer shape
+    const positions = saucerGeometry.attributes.position;
+    for (let i = 0; i < positions.count; i++) {
+      const y = positions.getY(i);
+      positions.setY(i, y * 0.5);
+    }
+    saucerGeometry.computeVertexNormals();
+    
+    const saucerTextures = this.textureManager.generateMetallicPanelTexture(1024, 0.92);
+    const saucerMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xb0b8c0,
+      map: saucerTextures.diffuse,
+      normalMap: saucerTextures.normal,
+      normalScale: new THREE.Vector2(1.2, 1.2),
+      roughnessMap: saucerTextures.roughness,
+      metalnessMap: saucerTextures.metalness,
+      aoMap: saucerTextures.ao,
+      metalness: 0.88,
+      roughness: 0.15,
+      clearcoat: 0.5,
+      clearcoatRoughness: 0.03,
+      envMapIntensity: 2.0
+    });
+    
+    const saucer = new THREE.Mesh(saucerGeometry, saucerMaterial);
+    saucer.position.set(0, 0, 1.5);
+    saucer.castShadow = true;
+    saucer.receiveShadow = true;
+    this.mesh.add(saucer);
+  }
+  
+  private createWarpNacelles(): void {
+    // Create warp nacelles on pylons
+    for (let side of [-1, 1]) {
+      // Nacelle
+      const nacelleGeometry = new THREE.CapsuleGeometry(0.35, 3, 8, 16);
+      const nacelleMaterial = new THREE.MeshPhysicalMaterial({
+        color: 0x7080a0,
+        metalness: 0.9,
+        roughness: 0.1,
+        clearcoat: 0.6,
+        clearcoatRoughness: 0.02,
+        emissive: new THREE.Color(0x0044ff),
+        emissiveIntensity: 0.3 + this.phase * 0.2
       });
       
-      const shard = new THREE.Mesh(shardGeometry, shardMaterial);
+      const nacelle = new THREE.Mesh(nacelleGeometry, nacelleMaterial);
+      nacelle.position.set(side * 2.2, 0, -2);
+      nacelle.rotation.z = Math.PI / 2;
+      nacelle.castShadow = true;
+      this.mesh.add(nacelle);
       
-      // Random orbit parameters
-      shard.userData = {
-        orbitRadius: 3 + Math.random() * 2,
-        orbitSpeed: 0.5 + Math.random() * 0.5,
-        orbitOffset: Math.random() * Math.PI * 2,
-        verticalOffset: (Math.random() - 0.5) * 2,
-        rotationSpeed: new THREE.Vector3(
-          Math.random() * 2,
-          Math.random() * 2,
-          Math.random() * 2
-        )
-      };
+      // Bussard collector (red glow)
+      const collectorGeometry = new THREE.ConeGeometry(0.4, 0.6, 12);
+      const collectorMaterial = new THREE.MeshPhysicalMaterial({
+        color: 0xff4400,
+        emissive: new THREE.Color(0xff2200),
+        emissiveIntensity: 1.8,
+        metalness: 0.2,
+        roughness: 0.0,
+        transmission: 0.6,
+        thickness: 0.2,
+        ior: 1.5
+      });
       
-      this.crystallineShards.push(shard);
-      this.mesh.add(shard);
+      const collector = new THREE.Mesh(collectorGeometry, collectorMaterial);
+      collector.position.set(side * 2.2, 0, -0.5);
+      collector.rotation.z = -Math.PI / 2;
+      this.mesh.add(collector);
       
-      // Add glow to each shard
-      const shardLight = new THREE.PointLight(0xff00ff, 0.5, 3);
-      shardLight.decay = 2;
-      shard.add(shardLight);
+      // Pylon
+      const pylonGeometry = new THREE.BoxGeometry(0.2, 1.0, 0.3);
+      const pylonMaterial = new THREE.MeshPhysicalMaterial({
+        color: 0x909090,
+        metalness: 0.85,
+        roughness: 0.2
+      });
+      
+      const pylon = new THREE.Mesh(pylonGeometry, pylonMaterial);
+      pylon.position.set(side * 1.5, 0, -2);
+      pylon.rotation.z = side * 0.3;
+      this.mesh.add(pylon);
+      
+      // Nacelle light
+      const nacelleLight = new THREE.SpotLight(0x0066ff, 3, 15, Math.PI / 4, 0.5, 2);
+      nacelleLight.position.copy(nacelle.position);
+      nacelleLight.target.position.set(side * 2.2, 0, -5);
+      this.mesh.add(nacelleLight);
+      this.mesh.add(nacelleLight.target);
     }
   }
   
-  private createCorruptionAura(): void {
-    // Create particle system for corruption aura
+  private createDeflectorDish(): void {
+    // Main deflector array
+    const dishGeometry = new THREE.ConeGeometry(0.7, 0.4, 24, 1, true);
+    const dishMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0x4488ff,
+      emissive: new THREE.Color(0x0066ff),
+      emissiveIntensity: 2.5,
+      metalness: 0.1,
+      roughness: 0.0,
+      transmission: 0.8,
+      thickness: 0.3,
+      ior: 1.8,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.0
+    });
+    
+    const dish = new THREE.Mesh(dishGeometry, dishMaterial);
+    dish.position.set(0, 0, 1.8);
+    dish.rotation.x = Math.PI / 2;
+    this.mesh.add(dish);
+    
+    // Deflector glow
+    const dishLight = new THREE.PointLight(0x0088ff, 4 + this.level, 12);
+    dishLight.position.copy(dish.position);
+    this.mesh.add(dishLight);
+  }
+  
+  private createBridge(): void {
+    // Bridge module on top of saucer
+    const bridgeGeometry = new THREE.CylinderGeometry(0.35, 0.4, 0.25, 12);
+    const bridgeMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xa8b0b8,
+      metalness: 0.8,
+      roughness: 0.25,
+      clearcoat: 0.4
+    });
+    
+    const bridge = new THREE.Mesh(bridgeGeometry, bridgeMaterial);
+    bridge.position.set(0, 0.6, 1.5);
+    this.mesh.add(bridge);
+    
+    // Bridge viewport
+    const viewportGeometry = new THREE.BoxGeometry(0.5, 0.06, 0.25);
+    const viewportMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0x88ccff,
+      emissive: new THREE.Color(0x4488ff),
+      emissiveIntensity: 0.8,
+      metalness: 0.0,
+      roughness: 0.0,
+      transmission: 0.9,
+      thickness: 0.05
+    });
+    
+    const viewport = new THREE.Mesh(viewportGeometry, viewportMaterial);
+    viewport.position.set(0, 0.65, 1.7);
+    this.mesh.add(viewport);
+  }
+  
+  private createPhaserArrays(): void {
+    // Phaser strips
+    const phaserGeometry = new THREE.BoxGeometry(1.5, 0.04, 0.08);
+    const phaserMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xff8800,
+      emissive: new THREE.Color(0xff4400),
+      emissiveIntensity: 0.4 + this.phase * 0.2,
+      metalness: 0.4,
+      roughness: 0.1,
+      clearcoat: 0.8
+    });
+    
+    // Upper array
+    const upperPhaser = new THREE.Mesh(phaserGeometry, phaserMaterial);
+    upperPhaser.position.set(0, 0.45, 1.2);
+    this.mesh.add(upperPhaser);
+    
+    // Lower array
+    const lowerPhaser = new THREE.Mesh(phaserGeometry, phaserMaterial.clone());
+    lowerPhaser.position.set(0, -0.45, 1.2);
+    this.mesh.add(lowerPhaser);
+  }
+  
+  private createWindowArrays(): void {
+    // Window strips with glow
+    const windowCount = 20;
+    const windowGeometry = new THREE.BoxGeometry(0.12, 0.04, 0.06);
+    
+    for (let i = 0; i < windowCount; i++) {
+      const angle = (i / windowCount) * Math.PI * 2;
+      const radius = 2.8;
+      
+      const windowMaterial = new THREE.MeshPhysicalMaterial({
+        color: 0xffffaa,
+        emissive: new THREE.Color(0xffff88),
+        emissiveIntensity: 0.7 + Math.random() * 0.3,
+        metalness: 0.0,
+        roughness: 0.0,
+        transmission: 0.95
+      });
+      
+      const window = new THREE.Mesh(windowGeometry, windowMaterial);
+      window.position.set(
+        Math.cos(angle) * radius,
+        0,
+        Math.sin(angle) * radius + 1.5
+      );
+      window.lookAt(new THREE.Vector3(0, 0, 1.5));
+      this.mesh.add(window);
+    }
+  }
+  
+  private createHullDetails(): void {
+    // Add panel lines and details
+    const lineCount = 12;
+    const lineMaterial = new THREE.LineBasicMaterial({
+      color: 0x606070,
+      transparent: true,
+      opacity: 0.4
+    });
+    
+    for (let i = 0; i < lineCount; i++) {
+      const points = [];
+      const z = -2 + i * 0.35;
+      
+      for (let j = 0; j <= 16; j++) {
+        const angle = (j / 16) * Math.PI * 2;
+        const radius = 1.3 * (1 - Math.abs(z + 1) / 3 * 0.3);
+        points.push(new THREE.Vector3(
+          Math.cos(angle) * radius * 1.2,
+          Math.sin(angle) * radius * 0.7,
+          z
+        ));
+      }
+      
+      const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+      const line = new THREE.Line(lineGeometry, lineMaterial);
+      line.rotation.z = Math.PI / 2;
+      this.mesh.add(line);
+    }
+    
+    // Navigation lights
+    const navLights = [
+      { pos: new THREE.Vector3(-3, 0, 1.5), color: 0xff0000 },
+      { pos: new THREE.Vector3(3, 0, 1.5), color: 0x00ff00 },
+      { pos: new THREE.Vector3(0, 0.8, 1.5), color: 0xffffff }
+    ];
+    
+    navLights.forEach(light => {
+      const geometry = new THREE.SphereGeometry(0.06, 6, 6);
+      const material = new THREE.MeshBasicMaterial({
+        color: light.color
+      });
+      const marker = new THREE.Mesh(geometry, material);
+      marker.position.copy(light.pos);
+      this.mesh.add(marker);
+    });
+  }
+  
+  private createEngineGlows(): void {
+    // Main impulse engines
+    for (let i = 0; i < 2; i++) {
+      const engineGeometry = new THREE.CylinderGeometry(0.25, 0.35, 0.15, 12);
+      const engineMaterial = new THREE.MeshPhysicalMaterial({
+        color: 0xff6600,
+        emissive: new THREE.Color(0xff3300),
+        emissiveIntensity: 2.0 + this.phase * 0.5,
+        metalness: 0.0,
+        roughness: 0.0,
+        transmission: 0.9,
+        clearcoat: 1.0
+      });
+      
+      const engine = new THREE.Mesh(engineGeometry, engineMaterial);
+      engine.position.set((i - 0.5) * 1.0, 0, -2.2);
+      engine.rotation.x = Math.PI / 2;
+      this.mesh.add(engine);
+      
+      // Engine light
+      const engineLight = new THREE.PointLight(0xff6600, 2 + this.level, 8);
+      engineLight.position.copy(engine.position);
+      this.mesh.add(engineLight);
+    }
+  }
+  
+  private createWarpPlasmaTrails(): void {
+    // Warp plasma particle trails
     const particleCount = 200;
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
@@ -151,22 +419,18 @@ export class SimpleBoss {
     
     for (let i = 0; i < particleCount; i++) {
       const i3 = i * 3;
+      const side = i < particleCount / 2 ? -1 : 1;
       
-      // Random position around boss
-      const angle = Math.random() * Math.PI * 2;
-      const radius = 2 + Math.random() * 4;
-      const height = (Math.random() - 0.5) * 4;
+      positions[i3] = side * 2.2 + (Math.random() - 0.5) * 0.2;
+      positions[i3 + 1] = (Math.random() - 0.5) * 0.2;
+      positions[i3 + 2] = -3.5 - Math.random() * 2;
       
-      positions[i3] = Math.cos(angle) * radius;
-      positions[i3 + 1] = height;
-      positions[i3 + 2] = Math.sin(angle) * radius;
+      // Blue-white plasma
+      colors[i3] = 0.5 + Math.random() * 0.5;
+      colors[i3 + 1] = 0.7 + Math.random() * 0.3;
+      colors[i3 + 2] = 1.0;
       
-      // Purple-magenta color variation
-      colors[i3] = 0.8 + Math.random() * 0.2;
-      colors[i3 + 1] = 0;
-      colors[i3 + 2] = 0.8 + Math.random() * 0.2;
-      
-      sizes[i] = 0.1 + Math.random() * 0.3;
+      sizes[i] = 0.08 + Math.random() * 0.12;
     }
     
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -174,10 +438,10 @@ export class SimpleBoss {
     geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
     
     const material = new THREE.PointsMaterial({
-      size: 0.3,
+      size: 0.15,
       vertexColors: true,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.7,
       blending: THREE.AdditiveBlending,
       depthWrite: false
     });
@@ -235,61 +499,87 @@ export class SimpleBoss {
     // Update mesh position
     this.mesh.position.copy(this.position);
     
-    // Animate crystalline nucleus with phase-based intensity
-    this.nucleus.rotation.y += deltaTime * (0.5 + this.phase * 0.3);
-    this.nucleus.rotation.x = Math.sin(this.time * 2) * 0.2;
-    const scale = 1 + Math.sin(this.time * 3 + this.phase) * 0.15;
-    this.nucleus.scale.setScalar(scale);
+    // Animate spacecraft with realistic movement
+    // Banking and tilting based on movement direction
+    const targetRotationY = Math.atan2(direction.x, direction.z);
+    this.mesh.rotation.y = THREE.MathUtils.lerp(this.mesh.rotation.y, targetRotationY, deltaTime * 2);
     
-    // Update crystalline shard orbits
-    this.crystallineShards.forEach((shard, index) => {
-      const data = shard.userData;
-      const orbitAngle = this.time * data.orbitSpeed + data.orbitOffset;
-      
-      shard.position.x = Math.cos(orbitAngle) * data.orbitRadius;
-      shard.position.z = Math.sin(orbitAngle) * data.orbitRadius;
-      shard.position.y = data.verticalOffset + Math.sin(this.time * 2 + index) * 0.5;
-      
-      // Rotate shards
-      shard.rotation.x += data.rotationSpeed.x * deltaTime;
-      shard.rotation.y += data.rotationSpeed.y * deltaTime;
-      shard.rotation.z += data.rotationSpeed.z * deltaTime;
-      
-      // Scale pulse based on phase
-      const shardScale = 1 + Math.sin(this.time * 4 + index) * 0.2 * this.phase;
-      shard.scale.setScalar(shardScale);
-    });
+    // Pitch when moving forward/backward
+    const targetPitch = distance > 8 ? -0.08 : (distance < 5 ? 0.08 : 0);
+    this.mesh.rotation.x = THREE.MathUtils.lerp(this.mesh.rotation.x, targetPitch, deltaTime * 2);
     
-    // Animate corruption aura
-    if (this.corruptionAura) {
-      this.corruptionAura.rotation.y += deltaTime * 0.1;
-      
-      // Update particle positions for swirling effect
-      const positions = this.corruptionAura.geometry.attributes.position.array as Float32Array;
-      for (let i = 0; i < positions.length; i += 3) {
-        const angle = Math.atan2(positions[i + 2], positions[i]);
-        const radius = Math.sqrt(positions[i] * positions[i] + positions[i + 2] * positions[i + 2]);
+    // Banking when turning
+    const turnRate = targetRotationY - this.mesh.rotation.y;
+    this.mesh.rotation.z = THREE.MathUtils.lerp(this.mesh.rotation.z, -turnRate * 0.2, deltaTime * 3);
+    
+    // Subtle hovering motion
+    this.mesh.position.y = 5 + Math.sin(this.time * 0.7) * 0.2;
+    
+    // Update engine glow intensity
+    this.updateEngineGlows(deltaTime);
+    
+    // Update phaser array glow when attacking
+    this.mesh.traverse(child => {
+      if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshPhysicalMaterial) {
+        // Pulse phaser arrays
+        if (child.material.emissive && child.material.emissive.getHex() === 0xff4400) {
+          if (this.isAttacking) {
+            child.material.emissiveIntensity = 1.0 + Math.sin(this.time * 15) * 0.5;
+          } else {
+            child.material.emissiveIntensity = 0.4 + this.phase * 0.2;
+          }
+        }
         
-        positions[i] = Math.cos(angle + deltaTime * 0.5) * radius;
-        positions[i + 2] = Math.sin(angle + deltaTime * 0.5) * radius;
-        positions[i + 1] += Math.sin(this.time * 2 + i) * deltaTime * 0.5;
+        // Pulse deflector dish
+        if (child.material.emissive && child.material.emissive.getHex() === 0x0066ff) {
+          child.material.emissiveIntensity = 2.5 + Math.sin(this.time * 3) * 0.5;
+        }
         
-        // Reset height if too far
-        if (Math.abs(positions[i + 1]) > 3) {
-          positions[i + 1] = (Math.random() - 0.5) * 2;
+        // Pulse engine glow
+        if (child.material.emissive && child.material.emissive.getHex() === 0xff3300) {
+          child.material.emissiveIntensity = 2.0 + this.phase * 0.5 + Math.sin(this.time * 5) * 0.3;
         }
       }
-      this.corruptionAura.geometry.attributes.position.needsUpdate = true;
+    });
+    
+    // Animate warp plasma trails
+    if (this.corruptionAura) {
+      // Only update particle positions at reduced framerate
+      this.lastAuraUpdate += deltaTime;
+      if (this.lastAuraUpdate >= this.auraUpdateInterval) {
+        const positions = this.corruptionAura.geometry.attributes.position.array as Float32Array;
+        for (let i = 0; i < positions.length; i += 3) {
+          // Stream particles backward
+          positions[i + 2] -= this.lastAuraUpdate * 10 * (1 + this.phase * 0.5);
+          
+          // Reset particles that go too far
+          if (positions[i + 2] < -6) {
+            positions[i + 2] = -3.5;
+            const side = i < positions.length / 2 ? -1 : 1;
+            positions[i] = side * 2.2 + (Math.random() - 0.5) * 0.2;
+            positions[i + 1] = (Math.random() - 0.5) * 0.2;
+          }
+          
+          // Add turbulence
+          positions[i] += (Math.random() - 0.5) * this.lastAuraUpdate * 0.8;
+          positions[i + 1] += (Math.random() - 0.5) * this.lastAuraUpdate * 0.5;
+        }
+        this.corruptionAura.geometry.attributes.position.needsUpdate = true;
+        this.lastAuraUpdate = 0;
+      }
       
       // Pulse opacity based on phase
-      (this.corruptionAura.material as THREE.PointsMaterial).opacity = 0.4 + this.phase * 0.2 + Math.sin(this.time * 3) * 0.1;
+      (this.corruptionAura.material as THREE.PointsMaterial).opacity = 0.6 + this.phase * 0.1 + Math.sin(this.time * 4) * 0.2;
     }
     
-    // Update nucleus light intensity
-    const nucleusLight = this.nucleus.children.find(child => child instanceof THREE.PointLight) as THREE.PointLight;
-    if (nucleusLight) {
-      nucleusLight.intensity = 3 + this.level + Math.sin(this.time * 4) * 2 + this.phase;
-    }
+    // Update ship lights
+    this.mesh.traverse(child => {
+      if (child instanceof THREE.PointLight || child instanceof THREE.SpotLight) {
+        // Pulse lights based on ship status
+        const baseIntensity = child.userData.baseIntensity || 3;
+        child.intensity = baseIntensity * (0.9 + Math.sin(this.time * 2) * 0.1);
+      }
+    });
     
     // Update attack timer
     if (this.attackTimer > 0) {
@@ -305,44 +595,57 @@ export class SimpleBoss {
     
     const projectiles: THREE.Mesh[] = [];
     
-    // Shoot from center nucleus (more projectiles in higher phases)
+    // Fire photon torpedoes
     const projectileCount = Math.min(this.phase * 2, 6);
     
     for (let i = 0; i < projectileCount; i++) {
-      const projectileGeometry = new THREE.SphereGeometry(0.4, 6, 6);
-      const projectileMaterial = new THREE.MeshBasicMaterial({
-        color: 0xff00ff,
-        // emissive removed - not available on MeshBasicMaterial
-        // emissiveIntensity: 1,
+      // Create photon torpedo
+      const torpedoGeometry = new THREE.SphereGeometry(0.25, 8, 8);
+      const torpedoMaterial = new THREE.MeshPhysicalMaterial({
+        color: 0xff6600,
+        emissive: new THREE.Color(0xff4400),
+        emissiveIntensity: 3.0,
+        metalness: 0.0,
+        roughness: 0.0,
+        transmission: 0.7,
+        thickness: 0.1,
+        clearcoat: 1.0,
         transparent: true,
-        opacity: 0.9
+        opacity: 0.95
       });
-      const projectile = new THREE.Mesh(projectileGeometry, projectileMaterial);
       
-      // Start from boss position
-      projectile.position.copy(this.mesh.position);
+      const torpedo = new THREE.Mesh(torpedoGeometry, torpedoMaterial);
       
-      // Spread pattern based on projectile index
-      const angle = (i / projectileCount) * Math.PI * 2;
-      const spread = 0.3;
+      // Launch from torpedo tubes (front of ship)
+      torpedo.position.copy(this.mesh.position);
+      torpedo.position.z += 2;
+      torpedo.position.x += (i % 2 - 0.5) * 0.4;
+      
+      // Calculate targeting
+      const baseDirection = this.target.clone().sub(torpedo.position).normalize();
+      const spreadAngle = ((i - projectileCount / 2) / projectileCount) * 0.3;
       const direction = new THREE.Vector3(
-        Math.sin(angle) * spread,
-        0,
-        Math.cos(angle) * spread + 1
+        baseDirection.x * Math.cos(spreadAngle) - baseDirection.z * Math.sin(spreadAngle),
+        baseDirection.y,
+        baseDirection.x * Math.sin(spreadAngle) + baseDirection.z * Math.cos(spreadAngle)
       ).normalize();
       
-      projectile.userData = {
-        velocity: direction.multiplyScalar(20 + this.phase * 5),
-        damage: 10 * this.phase,
+      // Add torpedo glow
+      const torpedoLight = new THREE.PointLight(0xff6600, 1.5, 4);
+      torpedo.add(torpedoLight);
+      
+      torpedo.userData = {
+        velocity: direction.multiplyScalar(25 + this.phase * 5),
+        damage: 15 * this.phase,
         owner: 'boss'
       };
       
-      projectiles.push(projectile);
-      this.scene.add(projectile);
+      projectiles.push(torpedo);
+      this.scene.add(torpedo);
     }
     
-    // Simple attack effect
-    this.createAttackEffect();
+    // Phaser beam effect
+    this.createPhaserEffect();
     
     setTimeout(() => {
       this.isAttacking = false;
@@ -351,80 +654,128 @@ export class SimpleBoss {
     return projectiles;
   }
 
-  private createAttackEffect(): void {
-    // Create simple expanding ring
-    const ringGeometry = new THREE.RingGeometry(0.5, 3, 32);
-    const ringMaterial = new THREE.MeshBasicMaterial({
-      color: 0xff00ff,
+  private createPhaserEffect(): void {
+    // Cancel previous attack animation if still running
+    if (this.attackAnimationId !== null) {
+      cancelAnimationFrame(this.attackAnimationId);
+      this.attackAnimationId = null;
+    }
+    
+    // Create phaser beam effect
+    const beamGeometry = new THREE.CylinderGeometry(0.08, 0.04, 8, 6);
+    const beamMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xff8800,
+      emissive: new THREE.Color(0xff6600),
+      emissiveIntensity: 4.0,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.9,
       side: THREE.DoubleSide
     });
-    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-    ring.position.copy(this.position);
-    ring.rotation.x = -Math.PI / 2;
-    this.scene.add(ring);
+    
+    const beam = new THREE.Mesh(beamGeometry, beamMaterial);
+    const direction = this.target.clone().sub(this.mesh.position);
+    const distance = direction.length();
+    
+    beam.position.copy(this.mesh.position);
+    beam.position.y += 0.45; // From phaser array position
+    beam.scale.y = distance / 8;
+    beam.lookAt(this.target);
+    beam.rotateX(Math.PI / 2);
+    
+    this.scene.add(beam);
+    
+    // Flash effect
+    const flash = new THREE.PointLight(0xff8800, 8, 20);
+    flash.position.copy(beam.position);
+    this.scene.add(flash);
     
     // Animate and remove
     const startTime = Date.now();
     const animate = () => {
       const elapsed = (Date.now() - startTime) / 1000;
-      if (elapsed < 0.5) {
-        ring.scale.setScalar(1 + elapsed * 6);
-        ringMaterial.opacity = 0.8 * (1 - elapsed * 2);
-        requestAnimationFrame(animate);
+      if (elapsed < 0.25) {
+        beamMaterial.opacity = 0.9 * (1 - elapsed * 4);
+        beamMaterial.emissiveIntensity = 4.0 * (1 - elapsed * 3);
+        flash.intensity = 8 * (1 - elapsed * 4);
+        beam.scale.x = 1 + elapsed * 1.5;
+        beam.scale.z = 1 + elapsed * 1.5;
+        this.attackAnimationId = requestAnimationFrame(animate);
       } else {
-        this.scene.remove(ring);
-        ringGeometry.dispose();
-        ringMaterial.dispose();
+        this.scene.remove(beam);
+        this.scene.remove(flash);
+        beamGeometry.dispose();
+        beamMaterial.dispose();
+        this.attackAnimationId = null;
       }
     };
     animate();
+  }
+  
+  
+  private updateEngineGlows(_deltaTime: number): void {
+    // Update engine glow effects based on movement and phase
+    this.mesh.traverse(child => {
+      if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshPhysicalMaterial) {
+        // Update nacelle glow
+        if (child.material.emissive && child.material.emissive.getHex() === 0xff2200) {
+          child.material.emissiveIntensity = 1.8 + this.phase * 0.3 + Math.sin(this.time * 4) * 0.2;
+        }
+      }
+    });
   }
 
   public takeDamage(amount: number): void {
     this.health = Math.max(0, this.health - amount);
     
-    // Enhanced damage effect with crystalline shattering
+    // Shield impact effect - flash the hull
     if (this.nucleus.material instanceof THREE.MeshPhysicalMaterial) {
-      const originalEmissive = this.nucleus.material.emissive.clone();
-      this.nucleus.material.emissive.setHex(0xffffff);
-      this.nucleus.material.emissiveIntensity = 2.0;
+      const originalColor = this.nucleus.material.color.clone();
+      const originalEmissive = this.nucleus.material.emissive ? this.nucleus.material.emissive.clone() : new THREE.Color(0x000000);
       
-      // Shatter effect on shards
-      this.crystallineShards.forEach(shard => {
-        const originalPos = shard.position.clone();
-        const shakeAmount = 0.5;
-        shard.position.add(new THREE.Vector3(
-          (Math.random() - 0.5) * shakeAmount,
-          (Math.random() - 0.5) * shakeAmount,
-          (Math.random() - 0.5) * shakeAmount
-        ));
-        
-        setTimeout(() => {
-          shard.position.copy(originalPos);
-        }, 100);
-      });
+      // Shield flash effect
+      this.nucleus.material.color.setHex(0xffffff);
+      this.nucleus.material.emissive = new THREE.Color(0x4488ff);
+      this.nucleus.material.emissiveIntensity = 1.5;
+      
+      // Shake the ship
+      const originalPos = this.mesh.position.clone();
+      const shakeAmount = 0.3;
+      this.mesh.position.add(new THREE.Vector3(
+        (Math.random() - 0.5) * shakeAmount,
+        (Math.random() - 0.5) * shakeAmount,
+        (Math.random() - 0.5) * shakeAmount
+      ));
       
       setTimeout(() => {
+        this.mesh.position.copy(originalPos);
         if (this.nucleus.material instanceof THREE.MeshPhysicalMaterial) {
-          this.nucleus.material.emissive.copy(originalEmissive);
-          this.nucleus.material.emissiveIntensity = 0.5 + this.level * 0.15;
+          this.nucleus.material.color.copy(originalColor);
+          this.nucleus.material.emissive = originalEmissive;
+          this.nucleus.material.emissiveIntensity = 0;
         }
       }, 150);
     }
     
-    // Create damage particles
+    // Create damage particles (sparks and debris)
     this.createDamageParticles();
   }
   
   private createDamageParticles(): void {
-    const particleCount = 20;
+    // Limit active damage animations
+    if (this.damageAnimationIds.size > 3) {
+      return; // Skip if too many animations running
+    }
     
+    const particleCount = 10; // Reduced from 20
+    const particles: { mesh: THREE.Mesh, velocity: THREE.Vector3, geometry: THREE.BufferGeometry, material: THREE.Material }[] = [];
+    
+    // Create sparks and debris
     for (let i = 0; i < particleCount; i++) {
-      const particleGeometry = new THREE.TetrahedronGeometry(0.1 + Math.random() * 0.2, 0);
+      const particleGeometry = new THREE.BoxGeometry(0.08 + Math.random() * 0.12, 0.08 + Math.random() * 0.12, 0.08 + Math.random() * 0.12);
       const particleMaterial = new THREE.MeshBasicMaterial({
-        color: new THREE.Color().setHSL(0.8, 1, 0.5 + Math.random() * 0.3),
+        color: i < particleCount / 2 ? 
+          new THREE.Color(0xffaa00) : // Orange sparks
+          new THREE.Color(0x808080),  // Metal debris
         transparent: true,
         opacity: 0.9
       });
@@ -432,7 +783,6 @@ export class SimpleBoss {
       const particle = new THREE.Mesh(particleGeometry, particleMaterial);
       particle.position.copy(this.position);
       
-      // Random velocity
       const velocity = new THREE.Vector3(
         (Math.random() - 0.5) * 10,
         Math.random() * 5,
@@ -440,27 +790,36 @@ export class SimpleBoss {
       );
       
       this.scene.add(particle);
-      
-      // Animate particle
-      const startTime = Date.now();
-      const animate = () => {
-        const elapsed = (Date.now() - startTime) / 1000;
-        
-        if (elapsed < 1.5) {
-          particle.position.add(velocity.clone().multiplyScalar(0.02));
-          velocity.y -= 0.3; // Gravity
-          particle.rotation.x += 0.1;
-          particle.rotation.y += 0.15;
-          particleMaterial.opacity = 0.9 * (1 - elapsed / 1.5);
-          requestAnimationFrame(animate);
-        } else {
-          this.scene.remove(particle);
-          particleGeometry.dispose();
-          particleMaterial.dispose();
-        }
-      };
-      animate();
+      particles.push({ mesh: particle, velocity, geometry: particleGeometry, material: particleMaterial });
     }
+    
+    // Single animation loop for all particles
+    const startTime = Date.now();
+    const animate = () => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      
+      if (elapsed < 1.5) {
+        particles.forEach(p => {
+          p.mesh.position.add(p.velocity.clone().multiplyScalar(0.02));
+          p.velocity.y -= 0.3;
+          p.mesh.rotation.x += 0.1;
+          p.mesh.rotation.y += 0.15;
+          (p.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - elapsed / 1.5);
+        });
+        const animId = requestAnimationFrame(animate);
+        this.damageAnimationIds.add(animId);
+      } else {
+        // Cleanup all particles at once
+        particles.forEach(p => {
+          this.scene.remove(p.mesh);
+          p.geometry.dispose();
+          p.material.dispose();
+        });
+        this.damageAnimationIds.forEach(id => cancelAnimationFrame(id));
+        this.damageAnimationIds.clear();
+      }
+    };
+    animate();
   }
 
   public evolve(): void {
@@ -509,13 +868,15 @@ export class SimpleBoss {
   }
 
   public dispose(): void {
-    // Clean up crystalline shards
-    this.crystallineShards.forEach(shard => {
-      shard.geometry.dispose();
-      if (shard.material instanceof THREE.Material) {
-        shard.material.dispose();
-      }
-    });
+    // Cancel all running animations
+    if (this.attackAnimationId !== null) {
+      cancelAnimationFrame(this.attackAnimationId);
+      this.attackAnimationId = null;
+    }
+    this.damageAnimationIds.forEach(id => cancelAnimationFrame(id));
+    this.damageAnimationIds.clear();
+    
+    // Clean up any remaining particles or effects
     
     // Clean up corruption aura
     if (this.corruptionAura) {

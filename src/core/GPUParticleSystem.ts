@@ -28,6 +28,9 @@ export class GPUParticleSystem {
   private time: number = 0;
   private emissionTimer: number = 0;
   private sizeFactor: number = 1.0;
+  private updateFrame: number = 0;
+  private texture: THREE.Texture | null = null;
+  private needsAttributeUpdate: boolean = false;
   
   // Particle attributes
   private positions!: Float32Array;
@@ -105,9 +108,9 @@ export class GPUParticleSystem {
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 64, 64);
     
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.needsUpdate = true;
-    return texture;
+    this.texture = new THREE.CanvasTexture(canvas);
+    this.texture.needsUpdate = true;
+    return this.texture;
   }
 
   private emitParticle(): void {
@@ -152,6 +155,7 @@ export class GPUParticleSystem {
 
   public update(deltaTime: number, _playerPosition?: THREE.Vector3): void {
     this.time += deltaTime;
+    this.updateFrame++;
     
     // Emit new particles based on emission rate
     const emissionInterval = 1 / this.options.emissionRate;
@@ -160,11 +164,14 @@ export class GPUParticleSystem {
     while (this.emissionTimer >= emissionInterval && this.particleCount < this.options.maxParticles) {
       this.emitParticle();
       this.emissionTimer -= emissionInterval;
+      this.needsAttributeUpdate = true;
     }
     
     // Update existing particles
+    let hasActiveParticles = false;
     for (let i = 0; i < this.options.maxParticles; i++) {
       if (this.lifetimes[i] > 0) {
+        hasActiveParticles = true;
         const i3 = i * 3;
         
         // Update lifetime
@@ -175,6 +182,7 @@ export class GPUParticleSystem {
           this.lifetimes[i] = -1;
           this.sizes[i] = 0;
           this.particleCount--;
+          this.needsAttributeUpdate = true;
         } else {
           // Update physics
           // Update velocity with acceleration
@@ -189,25 +197,39 @@ export class GPUParticleSystem {
           
           // Fade out based on lifetime
           const lifeRatio = this.lifetimes[i] / this.options.particleLifetime;
-          this.sizes[i] = this.options.particleSize * this.sizeFactor * lifeRatio * (0.5 + Math.random() * 0.5);
+          // Remove random component from size calculation to reduce per-frame updates
+          this.sizes[i] = this.options.particleSize * this.sizeFactor * lifeRatio * 0.75;
           
-          // Optional: fade color
-          const fadeFactor = Math.pow(lifeRatio, 0.5);
-          const originalColor = this.options.color;
-          this.colors[i3] = originalColor.r * fadeFactor;
-          this.colors[i3 + 1] = originalColor.g * fadeFactor;
-          this.colors[i3 + 2] = originalColor.b * fadeFactor;
+          // Only update color every 3 frames to reduce computation
+          if (this.updateFrame % 3 === 0) {
+            const fadeFactor = Math.pow(lifeRatio, 0.5);
+            const originalColor = this.options.color;
+            this.colors[i3] = originalColor.r * fadeFactor;
+            this.colors[i3 + 1] = originalColor.g * fadeFactor;
+            this.colors[i3 + 2] = originalColor.b * fadeFactor;
+          }
+          this.needsAttributeUpdate = true;
         }
       }
     }
     
-    // Update geometry attributes
-    this.geometry.attributes.position.needsUpdate = true;
-    this.geometry.attributes.color.needsUpdate = true;
-    this.geometry.attributes.size.needsUpdate = true;
-    
-    // Update bounding sphere for frustum culling
-    this.geometry.computeBoundingSphere();
+    // Batch attribute updates - only update every 2 frames or when necessary
+    if (this.needsAttributeUpdate && (this.updateFrame % 2 === 0 || !hasActiveParticles)) {
+      this.geometry.attributes.position.needsUpdate = true;
+      this.geometry.attributes.size.needsUpdate = true;
+      
+      // Only update color every 3 frames
+      if (this.updateFrame % 3 === 0) {
+        this.geometry.attributes.color.needsUpdate = true;
+      }
+      
+      // Only compute bounding sphere every 5 frames
+      if (this.updateFrame % 5 === 0) {
+        this.geometry.computeBoundingSphere();
+      }
+      
+      this.needsAttributeUpdate = false;
+    }
   }
 
   public setPosition(position: THREE.Vector3): void {
@@ -227,8 +249,9 @@ export class GPUParticleSystem {
       this.scene.remove(this.particleSystem);
       this.geometry.dispose();
       this.material.dispose();
-      if (this.material.map) {
-        this.material.map.dispose();
+      if (this.texture) {
+        this.texture.dispose();
+        this.texture = null;
       }
     }
   }
