@@ -157,7 +157,7 @@ export class ItemDrop {
       },
       {
         type: ItemType.ENERGY_POTION,
-        value: 20,
+        value: 40,
         name: 'Energy Cell',
         color: 0x00ffff,
         icon: '⚡'

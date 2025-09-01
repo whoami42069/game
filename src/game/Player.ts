@@ -31,11 +31,15 @@ export class Player {
   private input: PlayerInput;
   // private lastInputDirection: THREE.Vector3 = new THREE.Vector3(0, 0, -1); // For future use
   private textureManager: TextureManager;
+  private dynamicLights: any;
   
-  // Movement constants optimized for responsive combat feel
-  private readonly MOVE_SPEED: number = 15;        // Direct movement speed (like original moveSpeed)
-  private readonly DASH_SPEED: number = 25;        // Dash speed boost
-  private readonly ROTATION_SPEED: number = 3;     // Tank control rotation speed
+  // Movement constants optimized for ultra-responsive combat feel
+  private readonly MOVE_SPEED: number = 18;        // Increased base speed for snappier movement
+  private readonly DASH_SPEED: number = 42;        // Increased dash speed for instant response
+  private readonly ROTATION_SPEED: number = 4.5;   // Faster rotation for responsive turning
+  
+  // Frame-perfect timing constants
+  private readonly COYOTE_TIME_FRAMES: number = 4;   // 4 frame coyote time
   
   private dashDuration: number = 0.2;
   private dashCooldown: number = 1;
@@ -53,9 +57,21 @@ export class Player {
   private leftEngineTrail: GPUParticleSystem | null = null;
   private rightEngineTrail: GPUParticleSystem | null = null;
   
-  // Input buffer for frame-perfect controls
+  // Enhanced input buffer for frame-perfect controls
   private inputBuffer: Map<string, number> = new Map();
-  private readonly INPUT_BUFFER_TIME: number = 200; // 200ms buffer
+  private readonly INPUT_BUFFER_TIME: number = 100; // Reduced to 100ms for more responsive feel
+  private lastFrameInputs: Map<string, boolean> = new Map();
+  private inputQueue: Array<{action: string, timestamp: number}> = [];
+  
+  // Movement interpolation for smooth visuals during frame drops
+  private previousPosition: THREE.Vector3 = new THREE.Vector3();
+  private targetPosition: THREE.Vector3 = new THREE.Vector3();
+  private smoothingFactor: number = 0.8; // Higher = more responsive
+  
+  // Memory management
+  private eventListeners: Array<{ target: EventTarget, type: string, listener: EventListener }> = [];
+  private timers: Set<number> = new Set();
+  private animationFrames: Set<number> = new Set();
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -80,8 +96,8 @@ export class Player {
   }
 
   private createModel(): void {
-    // Get AAA-quality ship hull textures
-    const hullTextures = this.textureManager.generateMetalHullTexture(512);
+    // Get battle-damaged AAA-quality ship hull textures for Skyrim-like weathered look
+    const hullTextures = this.textureManager.generateBattleDamagedHullTexture(512, 0.4);
     
     // === MAIN FUSELAGE - Angular Space Fighter Design ===
     const fuselageGroup = new THREE.Group();
@@ -91,27 +107,40 @@ export class Player {
     const noseMaterial = new THREE.MeshPhysicalMaterial({
       map: hullTextures.diffuse,
       normalMap: hullTextures.normal,
-      normalScale: new THREE.Vector2(1.0, 1.0),
+      normalScale: new THREE.Vector2(1.5, 1.5),
       roughnessMap: hullTextures.roughness,
       metalnessMap: hullTextures.metalness,
+      aoMap: hullTextures.ao,
+      emissiveMap: hullTextures.emissive,
       
-      // Enhanced AAA material properties
-      metalness: 0.95,
-      roughness: 0.1,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.05,
+      // Enhanced Skyrim-style weathered metal properties
+      metalness: 0.92,
+      roughness: 0.15,
+      clearcoat: 0.8,
+      clearcoatRoughness: 0.1,
       
-      // Glowing blue accents
-      // emissive removed - not available on MeshBasicMaterial,
-      emissiveIntensity: 0.4,
+      // Glowing energy accents
+      emissive: new THREE.Color(0x002244),
+      emissiveIntensity: 0.5,
       
-      // IBL support
-      envMapIntensity: 1.5,
+      // Enhanced environment reflections
+      envMapIntensity: 2.0,
       
-      // Physical properties
+      // Physical properties for realistic lighting
       ior: 1.5,
-      specularIntensity: 1.2,
-      specularColor: new THREE.Color(0x88ccff)
+      specularIntensity: 1.4,
+      specularColor: new THREE.Color(0x88ccff),
+      
+      // Subtle transmission for damaged areas
+      transmission: 0.02,
+      thickness: 0.1,
+      attenuationColor: new THREE.Color(0x002244),
+      attenuationDistance: 0.5,
+      
+      // Sheen for worn metal look
+      sheen: 0.3,
+      sheenRoughness: 0.6,
+      sheenColor: new THREE.Color(0x444466)
     });
     const nose = new THREE.Mesh(noseGeometry, noseMaterial);
     nose.position.set(0, 0, -1.5);
@@ -124,27 +153,36 @@ export class Player {
     const bodyMaterial = new THREE.MeshPhysicalMaterial({
       map: hullTextures.diffuse,
       normalMap: hullTextures.normal,
-      normalScale: new THREE.Vector2(1.2, 1.2),
+      normalScale: new THREE.Vector2(1.8, 1.8),
       roughnessMap: hullTextures.roughness,
       metalnessMap: hullTextures.metalness,
+      aoMap: hullTextures.ao,
+      emissiveMap: hullTextures.emissive,
       
-      // Enhanced body material
-      metalness: 0.9,
-      roughness: 0.15,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.1,
+      // Enhanced weathered body material
+      metalness: 0.88,
+      roughness: 0.2,
+      clearcoat: 0.6,
+      clearcoatRoughness: 0.15,
       
-      // Stronger emissive for main body
-      // emissive removed - not available on MeshBasicMaterial,
-      emissiveIntensity: 0.5,
+      // Stronger emissive for main body energy systems
+      emissive: new THREE.Color(0x003366),
+      emissiveIntensity: 0.6,
       
-      // Enhanced reflections
-      envMapIntensity: 1.8,
+      // Enhanced reflections for cinematic look
+      envMapIntensity: 2.2,
       
-      // Transmission for subtle transparency
-      ior: 1.5,
-      transmission: 0.02,
-      thickness: 0.1
+      // Physical properties
+      ior: 1.45,
+      transmission: 0.03,
+      thickness: 0.15,
+      attenuationColor: new THREE.Color(0x001133),
+      attenuationDistance: 0.8,
+      
+      // Battle-worn sheen
+      sheen: 0.4,
+      sheenRoughness: 0.7,
+      sheenColor: new THREE.Color(0x666688)
     });
     const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
     body.scale.set(1, 0.6, 2);
@@ -156,13 +194,22 @@ export class Player {
     const cockpitGeometry = new THREE.SphereGeometry(0.4, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2);
     const cockpitMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x00ccff,
-      // emissive removed - not available on MeshBasicMaterial,
-      emissiveIntensity: 0.6,
-      metalness: 0.1,
+      emissive: new THREE.Color(0x0088ff),
+      emissiveIntensity: 0.8,
+      metalness: 0.0,
       roughness: 0.0,
       transparent: true,
-      opacity: 0.7,
-      transmission: 0.3
+      opacity: 0.6,
+      transmission: 0.9,
+      thickness: 0.5,
+      ior: 1.8,
+      attenuationColor: new THREE.Color(0x0066cc),
+      attenuationDistance: 0.3,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.0,
+      envMapIntensity: 3.0,
+      specularIntensity: 2.0,
+      specularColor: new THREE.Color(0x00ffff)
     });
     const cockpit = new THREE.Mesh(cockpitGeometry, cockpitMaterial);
     cockpit.position.set(0, 0.3, -0.5);
@@ -189,14 +236,29 @@ export class Player {
       bevelThickness: 0.02
     });
     
+    // Get damaged wing textures
+    const wingTextures = this.textureManager.generateBattleDamagedHullTexture(256, 0.6);
+    
     const wingMaterial = new THREE.MeshPhysicalMaterial({
       color: 0xff0066,
-      // emissive removed - not available on MeshBasicMaterial,
-      emissiveIntensity: 0.4,
+      map: wingTextures.diffuse,
+      normalMap: wingTextures.normal,
+      normalScale: new THREE.Vector2(1.0, 1.0),
+      roughnessMap: wingTextures.roughness,
+      metalnessMap: wingTextures.metalness,
+      emissive: new THREE.Color(0x660033),
+      emissiveIntensity: 0.5,
+      emissiveMap: wingTextures.emissive,
       metalness: 0.85,
-      roughness: 0.2,
+      roughness: 0.25,
       transparent: true,
-      opacity: 0.9
+      opacity: 0.95,
+      clearcoat: 0.4,
+      clearcoatRoughness: 0.2,
+      envMapIntensity: 1.8,
+      sheen: 0.5,
+      sheenRoughness: 0.4,
+      sheenColor: new THREE.Color(0xff6688)
     });
     
     const leftMainWing = new THREE.Mesh(wingGeometry, wingMaterial);
@@ -226,10 +288,17 @@ export class Player {
     
     const stabWingMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x6600cc,
-      // emissive removed - not available on MeshBasicMaterial,
-      emissiveIntensity: 0.3,
+      map: wingTextures.diffuse,
+      normalMap: wingTextures.normal,
+      normalScale: new THREE.Vector2(0.8, 0.8),
+      roughnessMap: wingTextures.roughness,
+      emissive: new THREE.Color(0x330066),
+      emissiveIntensity: 0.4,
       metalness: 0.9,
-      roughness: 0.1
+      roughness: 0.15,
+      clearcoat: 0.6,
+      clearcoatRoughness: 0.1,
+      envMapIntensity: 1.5
     });
     
     const leftStabWing = new THREE.Mesh(stabWingGeometry, stabWingMaterial);
@@ -249,12 +318,24 @@ export class Player {
     
     // Main engine nozzles
     const nozzleGeometry = new THREE.CylinderGeometry(0.25, 0.35, 0.8, 8);
+    // Get heat-damaged engine textures
+    const engineTextures = this.textureManager.generateBattleDamagedHullTexture(256, 0.8);
+    
     const nozzleMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x333333,
-      // emissive removed - not available on MeshBasicMaterial,
-      emissiveIntensity: 0.2,
-      metalness: 1.0,
-      roughness: 0.3
+      map: engineTextures.diffuse,
+      normalMap: engineTextures.normal,
+      normalScale: new THREE.Vector2(2.0, 2.0),
+      roughnessMap: engineTextures.roughness,
+      metalnessMap: engineTextures.metalness,
+      aoMap: engineTextures.ao,
+      emissive: new THREE.Color(0x110000),
+      emissiveIntensity: 0.3,
+      metalness: 0.95,
+      roughness: 0.4,
+      clearcoat: 0.2,
+      clearcoatRoughness: 0.5,
+      envMapIntensity: 0.8
     });
     
     const leftNozzle = new THREE.Mesh(nozzleGeometry, nozzleMaterial);
@@ -311,10 +392,15 @@ export class Player {
     const cannonGeometry = new THREE.CylinderGeometry(0.08, 0.12, 0.6, 8);
     const cannonMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x00aaff,
-      // emissive removed - not available on MeshBasicMaterial,
-      emissiveIntensity: 0.5,
-      metalness: 0.9,
-      roughness: 0.1
+      emissive: new THREE.Color(0x0066cc),
+      emissiveIntensity: 0.7,
+      metalness: 0.95,
+      roughness: 0.05,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.0,
+      envMapIntensity: 2.5,
+      specularIntensity: 2.0,
+      specularColor: new THREE.Color(0x00ffff)
     });
     
     const leftCannon = new THREE.Mesh(cannonGeometry, cannonMaterial);
@@ -376,29 +462,59 @@ export class Player {
     
     this.mesh.add(detailGroup);
     
-    // === LIGHTING SYSTEM ===
-    // Main illumination
-    const mainLight = new THREE.PointLight(0x00ccff, 3, 12);
+    // === ENHANCED LIGHTING SYSTEM FOR SKYRIM-STYLE ATMOSPHERE ===
+    // Main illumination with dynamic intensity
+    const mainLight = new THREE.PointLight(0x00ccff, 4, 15);
     mainLight.position.set(0, 0, 0);
+    mainLight.castShadow = true;
+    mainLight.shadow.mapSize.setScalar(1024);
+    mainLight.shadow.camera.near = 0.1;
+    mainLight.shadow.camera.far = 20;
+    mainLight.decay = 2;
     this.mesh.add(mainLight);
     
-    // Engine lights
-    const engineLight1 = new THREE.PointLight(0x00ffaa, 1.5, 8);
+    // Engine lights with volumetric glow
+    const engineLight1 = new THREE.PointLight(0x00ffaa, 3, 12);
     engineLight1.position.set(-0.6, 0, 1.6);
+    engineLight1.castShadow = true;
+    engineLight1.shadow.mapSize.setScalar(512);
+    engineLight1.decay = 2;
     this.mesh.add(engineLight1);
     
-    const engineLight2 = new THREE.PointLight(0x00ffaa, 1.5, 8);
+    const engineLight2 = new THREE.PointLight(0x00ffaa, 3, 12);
     engineLight2.position.set(0.6, 0, 1.6);
+    engineLight2.castShadow = true;
+    engineLight2.shadow.mapSize.setScalar(512);
+    engineLight2.decay = 2;
     this.mesh.add(engineLight2);
     
-    // Navigation lights
-    const navLight1 = new THREE.PointLight(0xff0044, 0.8, 4);
+    // Enhanced navigation lights
+    const navLight1 = new THREE.PointLight(0xff0044, 1.5, 6);
     navLight1.position.set(-2.0, 0, 0.5);
+    navLight1.decay = 2;
     this.mesh.add(navLight1);
     
-    const navLight2 = new THREE.PointLight(0x00ff44, 0.8, 4);
+    const navLight2 = new THREE.PointLight(0x00ff44, 1.5, 6);
     navLight2.position.set(2.0, 0, 0.5);
+    navLight2.decay = 2;
     this.mesh.add(navLight2);
+    
+    // Add spotlight for dramatic effect
+    const spotLight = new THREE.SpotLight(0x0088ff, 2, 20, Math.PI / 6, 0.5, 2);
+    spotLight.position.set(0, 2, -2);
+    spotLight.target.position.set(0, 0, 2);
+    this.mesh.add(spotLight);
+    this.mesh.add(spotLight.target);
+    
+    // Store light references for dynamic updates
+    this.dynamicLights = {
+      main: mainLight,
+      engine1: engineLight1,
+      engine2: engineLight2,
+      nav1: navLight1,
+      nav2: navLight2,
+      spot: spotLight
+    };
     
     this.mesh.position.copy(this.position);
     this.scene.add(this.mesh);
@@ -458,112 +574,78 @@ export class Player {
   }
 
   private setupInput(): void {
-    window.addEventListener('keydown', (e) => {
-      const currentTime = Date.now();
-      
-      switch(e.key.toLowerCase()) {
-        case 'w':
-        case 'arrowup':
-          this.input.forward = true;
-          this.inputBuffer.set('forward', currentTime);
-          break;
-        case 's':
-        case 'arrowdown':
-          this.input.backward = true;
-          this.inputBuffer.set('backward', currentTime);
-          break;
-        case 'a':
-        case 'arrowleft':
-          this.input.left = true;
-          this.inputBuffer.set('left', currentTime);
-          break;
-        case 'd':
-        case 'arrowright':
-          this.input.right = true;
-          this.inputBuffer.set('right', currentTime);
-          break;
-        case ' ':
-          this.input.shoot = true;
-          this.inputBuffer.set('shoot', currentTime);
-          break;
-        case 'shift':
-          this.input.dash = true;
-          this.inputBuffer.set('dash', currentTime);
-          break;
-      }
-    });
-
-    window.addEventListener('keyup', (e) => {
-      switch(e.key.toLowerCase()) {
-        case 'w':
-        case 'arrowup':
-          this.input.forward = false;
-          this.inputBuffer.delete('forward');
-          break;
-        case 's':
-        case 'arrowdown':
-          this.input.backward = false;
-          this.inputBuffer.delete('backward');
-          break;
-        case 'a':
-        case 'arrowleft':
-          this.input.left = false;
-          this.inputBuffer.delete('left');
-          break;
-        case 'd':
-        case 'arrowright':
-          this.input.right = false;
-          this.inputBuffer.delete('right');
-          break;
-        case ' ':
-          this.input.shoot = false;
-          this.inputBuffer.delete('shoot');
-          break;
-        case 'shift':
-          this.input.dash = false;
-          this.inputBuffer.delete('dash');
-          break;
-      }
-    });
+    // Input is now handled by the centralized InputManager
+    // This method is kept for backwards compatibility but does nothing
+    console.log('Player input setup - delegated to InputManager');
   }
 
-  private processInputBuffer(): PlayerInput {
-    const currentTime = Date.now();
+  private processEnhancedInputBuffer(_deltaTime: number): PlayerInput {
+    const currentTime = performance.now();
     const bufferedInput = { ...this.input };
     
-    // Check buffered inputs and apply if within buffer time
-    for (const [action, timestamp] of this.inputBuffer.entries()) {
-      if (currentTime - timestamp <= this.INPUT_BUFFER_TIME) {
-        switch (action) {
-          case 'forward':
-            bufferedInput.forward = true;
-            break;
-          case 'backward':
-            bufferedInput.backward = true;
-            break;
-          case 'left':
-            bufferedInput.left = true;
-            break;
-          case 'right':
-            bufferedInput.right = true;
-            break;
-          case 'shoot':
-            bufferedInput.shoot = true;
-            break;
-          case 'dash':
-            bufferedInput.dash = true;
-            break;
+    // Process input queue for frame-perfect timing
+    this.inputQueue = this.inputQueue.filter(entry => {
+      const age = currentTime - entry.timestamp;
+      if (age <= this.INPUT_BUFFER_TIME) {
+        // Apply buffered input
+        switch (entry.action) {
+          case 'forward': bufferedInput.forward = true; break;
+          case 'backward': bufferedInput.backward = true; break;
+          case 'left': bufferedInput.left = true; break;
+          case 'right': bufferedInput.right = true; break;
+          case 'shoot': bufferedInput.shoot = true; break;
+          case 'dash': bufferedInput.dash = true; break;
         }
-      } else {
-        // Remove expired buffer entries
-        this.inputBuffer.delete(action);
+        return true; // Keep in queue
+      }
+      return false; // Remove expired
+    });
+    
+    // Enhanced responsiveness: Check for input prediction
+    // If we had input last frame but not this frame, provide coyote time
+    const coyoteTimeMs = (this.COYOTE_TIME_FRAMES / 60) * 1000;
+    
+    for (const [action, hadInput] of this.lastFrameInputs.entries()) {
+      if (hadInput && !this.getCurrentInput(action)) {
+        const bufferEntry = this.inputBuffer.get(action);
+        if (bufferEntry && currentTime - bufferEntry <= coyoteTimeMs) {
+          switch (action) {
+            case 'forward': bufferedInput.forward = true; break;
+            case 'backward': bufferedInput.backward = true; break;
+            case 'left': bufferedInput.left = true; break;
+            case 'right': bufferedInput.right = true; break;
+          }
+        }
       }
     }
     
+    // Store current frame inputs for next frame prediction
+    this.lastFrameInputs.set('forward', bufferedInput.forward);
+    this.lastFrameInputs.set('backward', bufferedInput.backward);
+    this.lastFrameInputs.set('left', bufferedInput.left);
+    this.lastFrameInputs.set('right', bufferedInput.right);
+    
     return bufferedInput;
   }
+  
+  private getCurrentInput(action: string): boolean {
+    switch (action) {
+      case 'forward': return this.input.forward;
+      case 'backward': return this.input.backward;
+      case 'left': return this.input.left;
+      case 'right': return this.input.right;
+      case 'shoot': return this.input.shoot;
+      case 'dash': return this.input.dash;
+      default: return false;
+    }
+  }
 
-  public update(deltaTime: number, bounds: { min: THREE.Vector3, max: THREE.Vector3 }, _camera?: THREE.Camera): void {
+  public update(deltaTime: number, bounds: { min: THREE.Vector3, max: THREE.Vector3 }, _camera?: THREE.Camera, inputManager?: any): void {
+    // Store previous position for interpolation
+    this.previousPosition.copy(this.position);
+    // Update dynamic lighting based on ship state
+    this.updateDynamicLighting();
+    
     // Update timers
     if (this.shootTimer > 0) {
       this.shootTimer -= deltaTime;
@@ -588,8 +670,20 @@ export class Player {
       }
     }
     
-    // Process input with buffer for frame-perfect controls
-    const bufferedInput = this.processInputBuffer();
+    // Get input from InputManager if provided, otherwise fall back to internal input
+    let bufferedInput;
+    if (inputManager) {
+      bufferedInput = {
+        forward: inputManager.isKeyPressed('KeyW') || inputManager.isKeyPressed('ArrowUp'),
+        backward: inputManager.isKeyPressed('KeyS') || inputManager.isKeyPressed('ArrowDown'),
+        left: inputManager.isKeyPressed('KeyA') || inputManager.isKeyPressed('ArrowLeft'),
+        right: inputManager.isKeyPressed('KeyD') || inputManager.isKeyPressed('ArrowRight'),
+        shoot: inputManager.isKeyPressed('Space'),
+        dash: inputManager.isKeyPressed('ShiftLeft') || inputManager.isKeyPressed('ShiftRight')
+      };
+    } else {
+      bufferedInput = this.processEnhancedInputBuffer(deltaTime);
+    }
     
     // Witcher-style tank controls
     // A/D rotate the character, W/S move forward/backward
@@ -640,12 +734,32 @@ export class Player {
     // Apply velocity
     this.position.add(this.velocity.clone().multiplyScalar(deltaTime));
     
-    // Keep within bounds
-    this.position.x = Math.max(bounds.min.x, Math.min(bounds.max.x, this.position.x));
-    this.position.z = Math.max(bounds.min.z, Math.min(bounds.max.z, this.position.z));
+    // Keep within circular bounds
+    const radius = (bounds as any).radius;
+    if (radius) {
+      // Check distance from center (0, y, 0)
+      const distanceFromCenter = Math.sqrt(this.position.x * this.position.x + this.position.z * this.position.z);
+      if (distanceFromCenter > radius) {
+        // Push player back inside the circle
+        const angle = Math.atan2(this.position.z, this.position.x);
+        this.position.x = Math.cos(angle) * radius;
+        this.position.z = Math.sin(angle) * radius;
+      }
+    } else {
+      // Fallback to rectangular bounds if radius not provided
+      this.position.x = Math.max(bounds.min.x, Math.min(bounds.max.x, this.position.x));
+      this.position.z = Math.max(bounds.min.z, Math.min(bounds.max.z, this.position.z));
+    }
     
-    // Update mesh position
-    this.mesh.position.copy(this.position);
+    // Smooth position interpolation for consistent visuals
+    this.targetPosition.copy(this.position);
+    
+    // Apply position with smoothing for frame drops
+    if (deltaTime > 0.025) { // If frame time > 25ms (40fps), use interpolation
+      this.mesh.position.lerpVectors(this.previousPosition, this.targetPosition, this.smoothingFactor);
+    } else {
+      this.mesh.position.copy(this.position);
+    }
     
     // Rotation is now handled by tank controls (A/D keys)
     
@@ -767,7 +881,8 @@ export class Player {
       if (elapsed < 0.5) {
         ring.scale.setScalar(1 + elapsed * 4);
         material.opacity = 0.8 * (1 - elapsed * 2);
-        requestAnimationFrame(animate);
+        const frameId = requestAnimationFrame(animate);
+        this.animationFrames.add(frameId);
       } else {
         this.scene.remove(ring);
         geometry.dispose();
@@ -777,15 +892,29 @@ export class Player {
     animate();
   }
 
-  public shoot(): THREE.Mesh[] | null {
-    const bufferedInput = this.processInputBuffer();
-    if (!this.canShoot || !bufferedInput.shoot || this.energy < 5) return null;
+  public shoot(inputManager?: any): THREE.Mesh[] | null {
+    // Check if we should shoot based on input
+    let shouldShoot = false;
+    if (inputManager) {
+      shouldShoot = inputManager.isKeyPressed('Space') || inputManager.wasKeyPressedRecently('Space', 50);
+    } else {
+      const bufferedInput = this.processEnhancedInputBuffer(0);
+      shouldShoot = bufferedInput.shoot;
+    }
+    
+    if (!this.canShoot || !shouldShoot || this.energy < 5) return null;
     
     this.canShoot = false;
-    // Apply weapon level to fire rate
-    this.shootCooldown = this.baseShootCooldown / (1 + (this.weaponLevel - 1) * 0.2);
+    // Apply weapon level to fire rate for responsive shooting
+    this.shootCooldown = this.baseShootCooldown / (1 + (this.weaponLevel - 1) * 0.25);
     this.shootTimer = this.shootCooldown;
     this.energy -= 5;
+    
+    // Instant visual feedback - create muzzle flash IMMEDIATELY
+    this.createInstantMuzzleFlash();
+    
+    // Instant screen flash for tactile combat feedback
+    this.createCombatScreenFlash();
     
     // Always shoot in the direction the ship is facing (not input direction)
     const shootDirection = new THREE.Vector3(
@@ -800,12 +929,12 @@ export class Player {
     // Create two projectiles (dual cannons)
     const offsets = [-0.3, 0.3];
     offsets.forEach(offset => {
-      // Create projectile mesh
-      const geometry = new THREE.ConeGeometry(0.2, 0.8, 6);
+      // Create enhanced projectile with instant feedback
+      const geometry = new THREE.ConeGeometry(0.25, 1.0, 8); // Slightly larger and more detailed
       const material = new THREE.MeshBasicMaterial({
         color: 0x00ffff,
         transparent: true,
-        opacity: 0.9
+        opacity: 1.0 // Full opacity for visibility
       });
       const projectile = new THREE.Mesh(geometry, material);
       
@@ -826,12 +955,12 @@ export class Player {
       }
       
       
-      // Set velocity in the exact direction we're moving/facing
-      // Apply weapon level to damage
+      // Enhanced projectile properties for responsive combat
       projectile.userData = {
-        velocity: shootDirection.clone().multiplyScalar(40), // Faster bullets
-        damage: 10 * this.weaponLevel, // Scale damage with weapon level
-        owner: 'player'
+        velocity: shootDirection.clone().multiplyScalar(55), // Much faster bullets for instant hit feel
+        damage: 10 * this.weaponLevel,
+        owner: 'player',
+        spawnTime: performance.now()
       };
       
       projectiles.push(projectile);
@@ -881,7 +1010,8 @@ export class Player {
       const elapsed = (Date.now() - startTime) / 1000;
       if (elapsed < 0.3) {
         (flash.material as THREE.MeshBasicMaterial).opacity = 0.5 * (1 - elapsed * 3.33);
-        requestAnimationFrame(animate);
+        const frameId = requestAnimationFrame(animate);
+        this.animationFrames.add(frameId);
       } else {
         this.scene.remove(flash);
         flash.geometry.dispose();
@@ -911,7 +1041,8 @@ export class Player {
       if (elapsed < 0.5) {
         shield.scale.setScalar(1 + elapsed * 2);
         shieldMaterial.opacity = 0.6 * (1 - elapsed * 2);
-        requestAnimationFrame(animate);
+        const frameId = requestAnimationFrame(animate);
+        this.animationFrames.add(frameId);
       } else {
         this.scene.remove(shield);
         shieldGeometry.dispose();
@@ -921,12 +1052,68 @@ export class Player {
     animate();
   }
 
+  private updateDynamicLighting(): void {
+    if (!this.dynamicLights) return;
+    
+    // Main light intensity based on health and speed
+    const healthFactor = this.health / this.maxHealth;
+    const speedFactor = Math.min(this.velocity.length() / this.MOVE_SPEED, 1.0);
+    
+    this.dynamicLights.main.intensity = 3 + speedFactor * 2 + (1 - healthFactor) * 1;
+    
+    // Color shift based on damage
+    const damageColor = new THREE.Color().lerpColors(
+      new THREE.Color(0x00ccff),
+      new THREE.Color(0xff4400),
+      1 - healthFactor
+    );
+    this.dynamicLights.main.color = damageColor;
+    
+    // Engine lights pulse with movement
+    const engineIntensity = 2 + speedFactor * 3 + Math.sin(Date.now() * 0.003) * 0.5;
+    this.dynamicLights.engine1.intensity = engineIntensity;
+    this.dynamicLights.engine2.intensity = engineIntensity;
+    
+    // Navigation lights blink when damaged
+    if (healthFactor < 0.3) {
+      const blink = Math.sin(Date.now() * 0.01) > 0;
+      this.dynamicLights.nav1.intensity = blink ? 2 : 0.5;
+      this.dynamicLights.nav2.intensity = blink ? 2 : 0.5;
+    }
+  }
+  
   public dispose(): void {
-    this.scene.remove(this.mesh);
+    // Clear all tracked timers
+    for (const timer of this.timers) {
+      clearTimeout(timer);
+    }
+    this.timers.clear();
+    
+    // Clear all tracked animation frames
+    for (const frameId of this.animationFrames) {
+      cancelAnimationFrame(frameId);
+    }
+    this.animationFrames.clear();
+    
+    // Remove all event listeners
+    for (const { target, type, listener } of this.eventListeners) {
+      target.removeEventListener(type, listener);
+    }
+    this.eventListeners.length = 0;
+    
+    // Clear input buffers
+    this.inputBuffer.clear();
+    
+    // Remove mesh from scene and dispose resources
+    if (this.mesh) {
+      this.scene.remove(this.mesh);
+      this.disposeMeshResources(this.mesh);
+    }
     
     if (this.trailMesh) {
       this.scene.remove(this.trailMesh);
       this.trailMesh.dispose();
+      this.trailMesh = null;
     }
     
     // Dispose particle systems
@@ -939,5 +1126,95 @@ export class Player {
       this.rightEngineTrail.dispose();
       this.rightEngineTrail = null;
     }
+    
+    // Clear arrays
+    this.trailPositions.length = 0;
+    
+    console.log('🧹 Player disposed completely');
+  }
+  
+  private createInstantMuzzleFlash(): void {
+    // Create dual muzzle flashes for both cannons
+    const offsets = [-0.3, 0.3];
+    const shootDirection = new THREE.Vector3(
+      Math.sin(this.mesh.rotation.y),
+      0,
+      Math.cos(this.mesh.rotation.y)
+    );
+    
+    offsets.forEach(offset => {
+      const flashGeometry = new THREE.SphereGeometry(0.4, 8, 8);
+      const flashMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00ffff,
+        transparent: true,
+        opacity: 0.8
+      });
+      const flash = new THREE.Mesh(flashGeometry, flashMaterial);
+      
+      // Position at cannon
+      flash.position.copy(this.position);
+      const perpendicular = new THREE.Vector3(-shootDirection.z, 0, shootDirection.x).normalize();
+      flash.position.add(perpendicular.multiplyScalar(offset));
+      flash.position.add(shootDirection.clone().multiplyScalar(1.2));
+      
+      this.scene.add(flash);
+      
+      // Instant fade animation (no delays)
+      let opacity = 0.8;
+      const fadeStep = () => {
+        opacity -= 0.1;
+        flashMaterial.opacity = Math.max(0, opacity);
+        if (opacity > 0) {
+          requestAnimationFrame(fadeStep);
+        } else {
+          this.scene.remove(flash);
+          flashGeometry.dispose();
+          flashMaterial.dispose();
+        }
+      };
+      requestAnimationFrame(fadeStep);
+    });
+  }
+  
+  private createCombatScreenFlash(): void {
+    // Instant screen flash for combat feedback
+    const flash = document.createElement('div');
+    flash.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 255, 255, 0.1);
+      pointer-events: none;
+      z-index: 1000;
+    `;
+    document.body.appendChild(flash);
+    
+    // Remove immediately for instant feedback
+    setTimeout(() => {
+      flash.remove();
+    }, 50);
+  }
+  
+  private disposeMeshResources(mesh: THREE.Object3D): void {
+    mesh.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        if (child.geometry) {
+          child.geometry.dispose();
+        }
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach(material => material.dispose());
+          } else {
+            child.material.dispose();
+          }
+        }
+      }
+      if (child instanceof THREE.Light) {
+        // Lights don't have geometry/material but we can dispose them
+        child.dispose?.();
+      }
+    });
   }
 }
