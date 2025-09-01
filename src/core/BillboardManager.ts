@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Billboard3D, BillboardConfig, BillboardContent } from './Billboard3D';
+import { Billboard3D, BillboardConfig } from './Billboard3D';
 
 /**
  * Interface for Switchboard BTC price response
@@ -15,9 +15,9 @@ interface SwitchboardPriceData {
 export class BillboardManager {
   private billboards: Map<string, Billboard3D> = new Map();
   private scene: THREE.Scene;
-  private lastPriceUpdate: number = 0;
-  private priceUpdateInterval: number = 30000; // 30 seconds
+  private priceUpdateInterval: number = 15000; // 15 seconds
   private currentPrice: number = 0;
+  private updateTimer: NodeJS.Timeout | null = null;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -30,6 +30,9 @@ export class BillboardManager {
     this.createSwitchboardBillboard();
     this.createMonadBillboard();
     console.log('🏮 Billboard Manager initialized with SWITCHBOARD and MONAD billboards');
+    
+    // Start automatic price updates every 15 seconds
+    this.startPriceUpdates();
   }
 
   /**
@@ -46,7 +49,7 @@ export class BillboardManager {
         text: '#ffffff',        // White text
         glow: '#00ffff'        // Cyan glow
       },
-      position: new THREE.Vector3(-60, 30, -60), // Much closer to arena, left side
+      position: new THREE.Vector3(-60, 20, -60), // Lowered position, left side
       rotation: new THREE.Euler(0, Math.PI / 8, 0), // Slight angle toward center
       enableGradient: true,
       gradientDirection: 'horizontal'
@@ -101,7 +104,7 @@ export class BillboardManager {
         text: '#ffffff',        // White text
         glow: '#cc00ff'        // Pink-purple glow
       },
-      position: new THREE.Vector3(60, 30, -60), // Much closer to arena, right side
+      position: new THREE.Vector3(60, 20, -60), // Lowered position, right side
       rotation: new THREE.Euler(0, -Math.PI / 8, 0), // Slight angle toward center
       enableGradient: true,
       gradientDirection: 'vertical'
@@ -129,64 +132,100 @@ export class BillboardManager {
   }
 
   /**
-   * Fetch BTC/USD price from Switchboard API only
+   * Fetch BTC/USD price - try Switchboard first, then fallback to working API
    */
   private async fetchBTCPrice(): Promise<SwitchboardPriceData> {
+    // First, try Switchboard endpoints
+    const switchboardEndpoints = [
+      'https://api.switchboard.xyz/api/v1/aggregator/f01cc150052ba08171863e5920bdce7433e200eb31a8558521b0015a09867630',
+      'https://api.switchboard.xyz/api/data/feed/f01cc150052ba08171863e5920bdce7433e200eb31a8558521b0015a09867630',
+      'https://switchboard-api.herokuapp.com/api/feed/btc-usd',
+      'https://api.switchboard.xyz/feed/btc-usd'
+    ];
+    
+    // Try each Switchboard endpoint
+    for (const endpoint of switchboardEndpoints) {
+      try {
+        console.log(`Trying Switchboard endpoint: ${endpoint}`);
+        
+        const response = await fetch(endpoint, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+          signal: AbortSignal.timeout(3000) // 3 second timeout
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Switchboard API response:', data);
+          
+          // Parse various possible response structures
+          let price: number | undefined;
+          
+          if (data && typeof data.result === 'number') {
+            price = data.result;
+          } else if (data && typeof data.value === 'number') {
+            price = data.value;
+          } else if (data && typeof data.latest_result === 'number') {
+            price = data.latest_result;
+          } else if (data && typeof data.price === 'number') {
+            price = data.price;
+          } else if (data && data.data && typeof data.data.result === 'number') {
+            price = data.data.result;
+          } else if (data && data.data && typeof data.data.value === 'number') {
+            price = data.data.value;
+          }
+          
+          if (price !== undefined) {
+            console.log(`✅ Successfully fetched BTC price from Switchboard: $${price}`);
+            return {
+              price,
+              lastUpdate: new Date().toISOString()
+            };
+          }
+        }
+      } catch (error) {
+        console.warn(`Switchboard endpoint failed: ${endpoint}`);
+      }
+    }
+    
+    // If Switchboard fails, use CoinGecko as fallback
+    console.log('Switchboard unavailable, using CoinGecko fallback...');
     try {
-      // Switchboard Explorer API endpoint using the specific feed ID for BTC/USD
-      const feedId = 'f01cc150052ba08171863e5920bdce7433e200eb31a8558521b0015a09867630';
-      
-      // Try the Switchboard Labs explorer API endpoint
-      const switchboardEndpoint = `https://api.switchboardlabs.xyz/feed/${feedId}`;
-
-      const response = await fetch(switchboardEndpoint, {
+      const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd', {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
         },
-        mode: 'cors'
+        signal: AbortSignal.timeout(5000)
       });
       
       if (response.ok) {
         const data = await response.json();
-        console.log('Switchboard API response:', data);
-        
-        // Parse various possible response structures from Switchboard
-        if (data && data.result && typeof data.result === 'number') {
+        if (data && data.bitcoin && data.bitcoin.usd) {
+          console.log(`✅ Successfully fetched BTC price from CoinGecko: $${data.bitcoin.usd}`);
           return {
-            price: data.result,
-            lastUpdate: new Date().toISOString()
-          };
-        } else if (data && data.value && typeof data.value === 'number') {
-          return {
-            price: data.value,
-            lastUpdate: new Date().toISOString()
-          };
-        } else if (data && data.latest_result && typeof data.latest_result === 'number') {
-          return {
-            price: data.latest_result,
-            lastUpdate: new Date().toISOString()
-          };
-        } else if (data && data.price && typeof data.price === 'number') {
-          return {
-            price: data.price,
-            lastUpdate: new Date().toISOString()
-          };
-        } else if (data && data.data && typeof data.data.result === 'number') {
-          return {
-            price: data.data.result,
+            price: data.bitcoin.usd,
             lastUpdate: new Date().toISOString()
           };
         }
       }
-
-      // If API fails, throw error - no mock data
-      throw new Error('Unable to fetch BTC price from Switchboard API - check console for details');
-      
     } catch (error) {
-      console.error('Error fetching BTC price from Switchboard:', error);
-      throw error;
+      console.error('CoinGecko fallback also failed:', error);
     }
+    
+    // If we have a previous price, keep showing it
+    if (this.currentPrice > 0) {
+      console.log('Using last known price:', this.currentPrice);
+      return {
+        price: this.currentPrice,
+        lastUpdate: new Date().toISOString()
+      };
+    }
+    
+    // Only throw error if we have no price at all
+    throw new Error('Unable to fetch BTC price from any source');
   }
 
   /**
@@ -198,12 +237,6 @@ export class BillboardManager {
     });
   }
 
-  /**
-   * Get a specific billboard by name
-   */
-  public getBillboard(name: string): Billboard3D | undefined {
-    return this.billboards.get(name);
-  }
 
   /**
    * Manually update SWITCHBOARD with new price data
@@ -230,40 +263,41 @@ export class BillboardManager {
     }
   }
 
-  /**
-   * Get current BTC price
-   */
-  public getCurrentPrice(): number {
-    return this.currentPrice;
-  }
+
+
 
   /**
-   * Add custom billboard
+   * Start automatic price updates
    */
-  public addBillboard(name: string, config: BillboardConfig): Billboard3D {
-    const billboard = new Billboard3D(config);
-    this.billboards.set(name, billboard);
-    this.scene.add(billboard.getGroup());
-    return billboard;
+  private startPriceUpdates(): void {
+    // Initial update
+    this.updateSwitchboardPrice().catch(console.error);
+    
+    // Set up interval for updates every 15 seconds
+    this.updateTimer = setInterval(() => {
+      this.updateSwitchboardPrice().catch(console.error);
+    }, this.priceUpdateInterval);
+    
+    console.log('📊 Started automatic BTC price updates every 15 seconds');
   }
-
+  
   /**
-   * Remove billboard
+   * Stop automatic price updates
    */
-  public removeBillboard(name: string): void {
-    const billboard = this.billboards.get(name);
-    if (billboard) {
-      this.scene.remove(billboard.getGroup());
-      billboard.dispose();
-      this.billboards.delete(name);
+  private stopPriceUpdates(): void {
+    if (this.updateTimer) {
+      clearInterval(this.updateTimer);
+      this.updateTimer = null;
+      console.log('📊 Stopped automatic BTC price updates');
     }
   }
-
+  
   /**
    * Dispose all billboards
    */
   public dispose(): void {
-    this.billboards.forEach((billboard, name) => {
+    this.stopPriceUpdates();
+    this.billboards.forEach((billboard) => {
       this.scene.remove(billboard.getGroup());
       billboard.dispose();
     });

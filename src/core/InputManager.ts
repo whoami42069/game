@@ -115,7 +115,7 @@ export class InputManager {
     });
   }
 
-  public update(deltaTime: number): void {
+  public update(_deltaTime: number): void {
     // Reset just pressed/released flags
     for (const [key, state] of this.keys.entries()) {
       if (state.justPressed) {

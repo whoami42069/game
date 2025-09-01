@@ -7,10 +7,10 @@ export class SpaceArena {
   private platform: THREE.Group;
   private asteroids: THREE.Mesh[] = [];
   private debris: THREE.Group[] = [];
-  private stars: THREE.Points;
-  private nebula: THREE.Mesh;
-  private cosmicParticles: THREE.Points;
-  private solarWind: THREE.Points;
+  private stars!: THREE.Points;
+  private nebula!: THREE.Mesh;
+  private cosmicParticles!: THREE.Points;
+  private solarWind!: THREE.Points;
   private time: number = 0;
   private platformSize: number = 40;
   private textureManager: TextureManager;
@@ -665,8 +665,8 @@ export class SpaceArena {
     
     // Rotate platform core
     const core = this.platform.children.find(child => 
-      child.geometry instanceof THREE.OctahedronGeometry
-    );
+      'geometry' in child && child.geometry instanceof THREE.OctahedronGeometry
+    ) as THREE.Mesh | undefined;
     if (core) {
       core.rotation.x += deltaTime * 0.5;
       core.rotation.y += deltaTime * 0.3;
@@ -677,7 +677,7 @@ export class SpaceArena {
     }
     
     // Rotate platform border
-    const border = this.platform.children.find(child => child.geometry instanceof THREE.TorusGeometry);
+    const border = this.platform.children.find(child => 'geometry' in child && child.geometry instanceof THREE.TorusGeometry) as THREE.Mesh | undefined;
     if (border) {
       border.rotation.z += deltaTime * 0.3;
     }
@@ -740,9 +740,9 @@ export class SpaceArena {
     // Update skybox shader
     const sky = this.scene.children.find(child => 
       child instanceof THREE.Mesh && child.material instanceof THREE.ShaderMaterial
-    );
+    ) as THREE.Mesh | undefined;
     if (sky && sky.material instanceof THREE.ShaderMaterial) {
-      sky.material.uniforms.time.value = this.time;
+      (sky.material as THREE.ShaderMaterial).uniforms.time.value = this.time;
     }
   }
 

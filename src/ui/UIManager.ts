@@ -13,7 +13,7 @@ export class UIManager {
     console.log('🖼️ UIManager initialized');
   }
 
-  public update(deltaTime: number): void {
+  public update(_deltaTime: number): void {
     // Update UI animations, transitions, etc.
   }
 

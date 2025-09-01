@@ -15,10 +15,10 @@ export class Boss {
   private attackCooldown: number = 2;
   private attackTimer: number = 0;
   private rings: THREE.Mesh[] = [];
-  private core: THREE.Mesh;
-  private weapons: THREE.Mesh[] = [];
+  private core!: THREE.Mesh;
+  private weapons: THREE.Group[] = [];
   private time: number = 0;
-  private auraParticles: THREE.InstancedMesh | null = null;
+  // private auraParticles: THREE.InstancedMesh | null = null; // Unused variable
   private lastUpdateTime: number = 0;
   private updateFrequency: number = 0.016; // 60 FPS
   private originalSpawnPosition: THREE.Vector3; // Store original spawn position
@@ -53,7 +53,7 @@ export class Boss {
     const nucleusGeometry = new THREE.SphereGeometry(3, 16, 16);
     const nucleusMaterial = new THREE.MeshPhysicalMaterial({
       color: 0xff4400,
-      emissive: 0xff2200,
+      // emissive removed - not available on MeshBasicMaterial,
       emissiveIntensity: 0.6,
       metalness: 0.8,
       roughness: 0.2
@@ -68,7 +68,7 @@ export class Boss {
       const shellGeometry = new THREE.BoxGeometry(0.8, 0.8, 1.2);
       const shellMaterial = new THREE.MeshPhysicalMaterial({
         color: 0x2a2a2a,
-        emissive: 0x441100,
+        // emissive removed - not available on MeshBasicMaterial,
         emissiveIntensity: 0.2,
         metalness: 1.0,
         roughness: 0.4
@@ -96,7 +96,7 @@ export class Boss {
       const ringGeometry = new THREE.TorusGeometry(ringRadius, 0.3, 12, 32);
       const ringMaterial = new THREE.MeshPhysicalMaterial({
         color: i % 3 === 0 ? 0xff00aa : i % 3 === 1 ? 0xaa00ff : 0x00aaff,
-        emissive: i % 3 === 0 ? 0xff0066 : i % 3 === 1 ? 0x6600ff : 0x0066ff,
+        // emissive removed - not available on MeshBasicMaterial,
         emissiveIntensity: 0.6 + (this.phase * 0.2),
         metalness: 0.8,
         roughness: 0.1,
@@ -139,7 +139,7 @@ export class Boss {
       const housingGeometry = new THREE.CylinderGeometry(0.4, 0.6, 1.5, 8);
       const housingMaterial = new THREE.MeshPhysicalMaterial({
         color: 0x333333,
-        emissive: 0x004400,
+        // emissive removed - not available on MeshBasicMaterial,
         emissiveIntensity: 0.3,
         metalness: 0.95,
         roughness: 0.2
@@ -152,7 +152,7 @@ export class Boss {
       const barrelGeometry = new THREE.CylinderGeometry(0.2, 0.25, 2, 8);
       const barrelMaterial = new THREE.MeshPhysicalMaterial({
         color: 0x00ff44,
-        emissive: 0x00aa22,
+        // emissive removed - not available on MeshBasicMaterial,
         emissiveIntensity: 0.5 + (this.phase * 0.2),
         metalness: 0.9,
         roughness: 0.1
@@ -199,7 +199,7 @@ export class Boss {
       const upperSegmentGeometry = new THREE.CylinderGeometry(0.3, 0.4, 2.5, 8);
       const upperSegmentMaterial = new THREE.MeshPhysicalMaterial({
         color: 0x444444,
-        emissive: 0x222200,
+        // emissive removed - not available on MeshBasicMaterial,
         emissiveIntensity: 0.1,
         metalness: 0.9,
         roughness: 0.3
@@ -267,8 +267,8 @@ export class Boss {
       const warningGeometry = new THREE.BoxGeometry(0.3, 0.02, 0.8);
       const warningMaterial = new THREE.MeshBasicMaterial({
         color: 0xff3300,
-        emissive: 0xff3300,
-        emissiveIntensity: 0.4
+        // emissive not available on MeshBasicMaterial
+        // emissiveIntensity: 0.4
       });
       const warning = new THREE.Mesh(warningGeometry, warningMaterial);
       const angle = (i / 8) * Math.PI * 2;
@@ -286,8 +286,8 @@ export class Boss {
       const conduitGeometry = new THREE.CylinderGeometry(0.1, 0.1, 3, 6);
       const conduitMaterial = new THREE.MeshBasicMaterial({
         color: 0x00aaff,
-        emissive: 0x0066aa,
-        emissiveIntensity: 0.5,
+        // emissive not available on MeshBasicMaterial
+        // emissiveIntensity: 0.5,
         transparent: true,
         opacity: 0.7
       });

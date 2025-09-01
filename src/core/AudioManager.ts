@@ -31,7 +31,7 @@ export class AudioManager {
     console.log('🔊 AudioManager initialized');
   }
 
-  public update(deltaTime: number): void {
+  public update(_deltaTime: number): void {
     // Update audio system if needed
   }
 

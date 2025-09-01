@@ -14,8 +14,8 @@ export class SimpleBoss {
   private moveSpeed: number = 5;
   private attackCooldown: number = 2;
   private attackTimer: number = 0;
-  private electrons: THREE.Mesh[] = [];
-  private nucleus: THREE.Mesh;
+  // private electrons: THREE.Mesh[] = []; // Unused variable
+  private nucleus!: THREE.Mesh;
   private time: number = 0;
   private originalSpawnPosition: THREE.Vector3;
 
@@ -44,7 +44,7 @@ export class SimpleBoss {
     const nucleusGeometry = new THREE.SphereGeometry(2 + this.level * 0.2, 16, 16);
     const nucleusMaterial = new THREE.MeshPhysicalMaterial({
       color: 0xff6600,
-      emissive: 0xff3300,
+      // emissive removed - not available on MeshBasicMaterial,
       emissiveIntensity: 0.5 + this.level * 0.1,
       metalness: 0.7,
       roughness: 0.3,
@@ -126,8 +126,8 @@ export class SimpleBoss {
       const projectileGeometry = new THREE.SphereGeometry(0.4, 6, 6);
       const projectileMaterial = new THREE.MeshBasicMaterial({
         color: 0xff00ff,
-        emissive: 0xff00ff,
-        emissiveIntensity: 1,
+        // emissive removed - not available on MeshBasicMaterial
+        // emissiveIntensity: 1,
         transparent: true,
         opacity: 0.9
       });

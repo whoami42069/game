@@ -29,7 +29,7 @@ export class Player {
   
   private scene: THREE.Scene;
   private input: PlayerInput;
-  private lastInputDirection: THREE.Vector3 = new THREE.Vector3(0, 0, -1); // Store last input direction
+  private lastInputDirection: THREE.Vector3 = new THREE.Vector3(0, 0, -1);
   private textureManager: TextureManager;
   
   // Movement constants optimized for responsive combat feel
@@ -102,7 +102,7 @@ export class Player {
       clearcoatRoughness: 0.05,
       
       // Glowing blue accents
-      emissive: 0x002244,
+      // emissive removed - not available on MeshBasicMaterial,
       emissiveIntensity: 0.4,
       
       // IBL support
@@ -135,7 +135,7 @@ export class Player {
       clearcoatRoughness: 0.1,
       
       // Stronger emissive for main body
-      emissive: 0x003366,
+      // emissive removed - not available on MeshBasicMaterial,
       emissiveIntensity: 0.5,
       
       // Enhanced reflections
@@ -156,7 +156,7 @@ export class Player {
     const cockpitGeometry = new THREE.SphereGeometry(0.4, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2);
     const cockpitMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x00ccff,
-      emissive: 0x0088cc,
+      // emissive removed - not available on MeshBasicMaterial,
       emissiveIntensity: 0.6,
       metalness: 0.1,
       roughness: 0.0,
@@ -191,7 +191,7 @@ export class Player {
     
     const wingMaterial = new THREE.MeshPhysicalMaterial({
       color: 0xff0066,
-      emissive: 0xff0044,
+      // emissive removed - not available on MeshBasicMaterial,
       emissiveIntensity: 0.4,
       metalness: 0.85,
       roughness: 0.2,
@@ -226,7 +226,7 @@ export class Player {
     
     const stabWingMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x6600cc,
-      emissive: 0x4400aa,
+      // emissive removed - not available on MeshBasicMaterial,
       emissiveIntensity: 0.3,
       metalness: 0.9,
       roughness: 0.1
@@ -251,7 +251,7 @@ export class Player {
     const nozzleGeometry = new THREE.CylinderGeometry(0.25, 0.35, 0.8, 8);
     const nozzleMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x333333,
-      emissive: 0x002244,
+      // emissive removed - not available on MeshBasicMaterial,
       emissiveIntensity: 0.2,
       metalness: 1.0,
       roughness: 0.3
@@ -311,7 +311,7 @@ export class Player {
     const cannonGeometry = new THREE.CylinderGeometry(0.08, 0.12, 0.6, 8);
     const cannonMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x00aaff,
-      emissive: 0x004488,
+      // emissive removed - not available on MeshBasicMaterial,
       emissiveIntensity: 0.5,
       metalness: 0.9,
       roughness: 0.1
@@ -366,8 +366,8 @@ export class Player {
       const stripeGeometry = new THREE.BoxGeometry(0.05, 0.01, 0.2);
       const stripeMaterial = new THREE.MeshBasicMaterial({ 
         color: 0xffaa00,
-        emissive: 0xffaa00,
-        emissiveIntensity: 0.3
+        // emissive removed - not available on MeshBasicMaterial
+        // emissiveIntensity: 0.3
       });
       const stripe = new THREE.Mesh(stripeGeometry, stripeMaterial);
       stripe.position.set(0, 0.32, 0.5 + i * 0.3);
@@ -563,7 +563,7 @@ export class Player {
     return bufferedInput;
   }
 
-  public update(deltaTime: number, bounds: { min: THREE.Vector3, max: THREE.Vector3 }, camera?: THREE.Camera): void {
+  public update(deltaTime: number, bounds: { min: THREE.Vector3, max: THREE.Vector3 }, _camera?: THREE.Camera): void {
     // Update timers
     if (this.shootTimer > 0) {
       this.shootTimer -= deltaTime;

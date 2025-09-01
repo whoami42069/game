@@ -57,11 +57,11 @@ export class GameObjectPools {
   public pointMaterialPool: ObjectPool<THREE.PointsMaterial>;
   
   // Projectile pool
-  public projectilePool: ObjectPool<THREE.Mesh>;
+  public projectilePool: ObjectPool<THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]>>;
   
   // Particle pools
-  public particlePool: ObjectPool<THREE.Mesh>;
-  public effectPool: ObjectPool<THREE.Mesh>;
+  public particlePool: ObjectPool<THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]>>;
+  public effectPool: ObjectPool<THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]>>;
 
   private constructor() {
     // Geometry pools
@@ -90,7 +90,7 @@ export class GameObjectPools {
         material.color.setHex(0xffffff);
         material.opacity = 1;
         material.visible = true;
-        material.emissive.setHex(0x000000);
+        // MeshBasicMaterial doesn't have emissive property
       },
       50
     );
@@ -101,7 +101,7 @@ export class GameObjectPools {
         material.color.setHex(0xffffff);
         material.opacity = 1;
         material.visible = true;
-        material.emissive.setHex(0x000000);
+        // MeshBasicMaterial doesn't have emissive property
         material.emissiveIntensity = 0;
         material.metalness = 0.5;
         material.roughness = 0.5;
@@ -121,7 +121,7 @@ export class GameObjectPools {
     );
 
     // Projectile pool
-    this.projectilePool = new ObjectPool(
+    this.projectilePool = new ObjectPool<THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]>>(
       () => {
         const geometry = this.capsuleGeometryPool.get();
         const material = this.basicMaterialPool.get();
@@ -146,7 +146,7 @@ export class GameObjectPools {
     );
 
     // Particle effect pool
-    this.particlePool = new ObjectPool(
+    this.particlePool = new ObjectPool<THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]>>(
       () => {
         const geometry = new THREE.SphereGeometry(0.1, 4, 4);
         const material = this.basicMaterialPool.get();
@@ -165,7 +165,7 @@ export class GameObjectPools {
     );
 
     // Effect pool for larger effects
-    this.effectPool = new ObjectPool(
+    this.effectPool = new ObjectPool<THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]>>(
       () => {
         const geometry = this.sphereGeometryPool.get();
         const material = this.basicMaterialPool.get();

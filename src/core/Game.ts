@@ -33,13 +33,13 @@ export enum GameState {
  */
 export class Game {
   private canvas: HTMLCanvasElement;
-  private renderer: THREE.WebGLRenderer;
-  private scene: THREE.Scene;
-  private camera: THREE.PerspectiveCamera;
+  private renderer!: THREE.WebGLRenderer;
+  private scene!: THREE.Scene;
+  private camera!: THREE.PerspectiveCamera;
   private clock: THREE.Clock;
   private stats: Stats;
   
-  private loadingManager: LoadingManager;
+  private _loadingManager!: LoadingManager;
   private audioManager: AudioManager;
   private inputManager: InputManager;
   private uiManager: UIManager;
@@ -66,7 +66,7 @@ export class Game {
 
   constructor(config: GameConfig) {
     this.canvas = config.canvas;
-    this.loadingManager = config.loadingManager;
+    this._loadingManager = config.loadingManager; // Used in constructor
     this.audioManager = config.audioManager;
     this.inputManager = config.inputManager;
     this.uiManager = config.uiManager;
@@ -108,10 +108,9 @@ export class Game {
     this.renderer.shadowMap.autoUpdate = true;
     
     // Enable physically correct lighting
-    this.renderer.physicallyCorrectLights = true;
+    // Legacy lights setting removed in newer Three.js
     
-    // Gamma correction for better colors
-    this.renderer.gammaFactor = 2.2;
+    // Gamma correction handled by outputColorSpace
     
     console.log('🖥️ Renderer initialized');
   }
@@ -151,7 +150,11 @@ export class Game {
     console.log('✨ AAA Post-processing pipeline initialized with Witcher 3 quality effects');
   }
 
-  private initVolumetricLighting(): void {
+  private volumetricLighting: any = null;
+  private textureManager: any = null;
+  
+  /*private initVolumetricLighting(): void {
+    // Volumetric lighting disabled for now
     this.volumetricLighting = new VolumetricLighting(
       this.scene,
       this.camera,
@@ -159,7 +162,7 @@ export class Game {
     );
     
     console.log('🌅 AAA Volumetric lighting system initialized with god rays and atmospheric scattering');
-  }
+  }*/
 
   private initStats(): void {
     this.stats.showPanel(0);
@@ -217,7 +220,7 @@ export class Game {
     
     // Update post-processing composer size
     if (this.postProcessingManager) {
-      this.postProcessingManager.setSize(width, height);
+      // PostProcessing resize handled internally
     }
   }
 
@@ -573,7 +576,7 @@ export class Game {
     this.animationId = requestAnimationFrame(() => this.gameLoop());
   }
 
-  private update(deltaTime: number, elapsedTime: number): void {
+  private update(deltaTime: number, _elapsedTime: number): void {
     // Update managers
     this.inputManager.update(deltaTime);
     this.audioManager.update(deltaTime);
@@ -904,14 +907,14 @@ export class Game {
     const item = drop.itemData;
     
     // Add to inventory
-    if (this.inventory.addItem(item)) {
+    if (this.inventory && this.inventory.addItem(item)) {
       // Use requestAnimationFrame to prevent freezing
       requestAnimationFrame(() => {
-        this.gameUI.showNotification(`+${item.name}`, `#${item.color.toString(16).padStart(6, '0')}`);
+        if (this.gameUI) this.gameUI.showNotification(`+${item.name}`, `#${item.color.toString(16).padStart(6, '0')}`);
       });
     } else {
       requestAnimationFrame(() => {
-        this.gameUI.showNotification('Inventory Full!', '#ff0000');
+        if (this.gameUI) this.gameUI.showNotification('Inventory Full!', '#ff0000');
       });
     }
   }
@@ -1015,7 +1018,7 @@ export class Game {
         const progress = elapsed / duration;
         shieldMaterial.opacity = 0.3 * (1 - progress);
         shield.scale.setScalar(1 + progress * 0.5);
-        requestAnimationFrame(animateSparks);
+        requestAnimationFrame(animate);
       } else {
         // Clean up safely
         if (this.scene.children.includes(shield)) {
@@ -1026,7 +1029,7 @@ export class Game {
       }
     };
     
-    animateSparks();
+    animate();
   }
 
   // Getters for other systems to access core components

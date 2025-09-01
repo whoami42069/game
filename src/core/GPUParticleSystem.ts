@@ -21,22 +21,22 @@ export class GPUParticleSystem {
   private scene: THREE.Scene;
   private options: GPUParticleOptions;
   private position: THREE.Vector3;
-  private particleSystem: THREE.Points;
-  private geometry: THREE.BufferGeometry;
-  private material: THREE.PointsMaterial;
+  private particleSystem!: THREE.Points;
+  private geometry!: THREE.BufferGeometry;
+  private material!: THREE.PointsMaterial;
   private particleCount: number = 0;
   private time: number = 0;
   private emissionTimer: number = 0;
   private sizeFactor: number = 1.0;
   
   // Particle attributes
-  private positions: Float32Array;
-  private velocities: Float32Array;
-  private accelerations: Float32Array;
-  private colors: Float32Array;
-  private lifetimes: Float32Array;
-  private sizes: Float32Array;
-  private startTimes: Float32Array;
+  private positions!: Float32Array;
+  private velocities!: Float32Array;
+  private accelerations!: Float32Array;
+  private colors!: Float32Array;
+  private lifetimes!: Float32Array;
+  private sizes!: Float32Array;
+  private startTimes!: Float32Array;
 
   constructor(scene: THREE.Scene, options: GPUParticleOptions, position: THREE.Vector3) {
     this.scene = scene;
@@ -150,7 +150,7 @@ export class GPUParticleSystem {
     }
   }
 
-  public update(deltaTime: number, playerPosition?: THREE.Vector3): void {
+  public update(deltaTime: number, _playerPosition?: THREE.Vector3): void {
     this.time += deltaTime;
     
     // Emit new particles based on emission rate

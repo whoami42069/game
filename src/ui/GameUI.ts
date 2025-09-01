@@ -1,18 +1,18 @@
 import { Player } from '@/game/Player';
 import { SimpleBoss } from '@/game/SimpleBoss';
 import { Inventory } from '@/game/Inventory';
-import { ItemType } from '@/game/ItemDrop';
+// import { ItemType } from '@/game/ItemDrop'; // Unused import
 
 export class GameUI {
   private container: HTMLDivElement;
-  private healthBar: HTMLDivElement;
-  private energyBar: HTMLDivElement;
-  private weaponLevelElement: HTMLDivElement;
-  private bossHealthBar: HTMLDivElement;
-  private scoreElement: HTMLDivElement;
-  private waveElement: HTMLDivElement;
-  private inventoryElement: HTMLDivElement;
-  private notificationElement: HTMLDivElement;
+  private healthBar!: HTMLDivElement;
+  private energyBar!: HTMLDivElement;
+  private weaponLevelElement!: HTMLDivElement;
+  private bossHealthBar!: HTMLDivElement;
+  private scoreElement!: HTMLDivElement;
+  private waveElement!: HTMLDivElement;
+  private inventoryElement!: HTMLDivElement;
+  private notificationElement!: HTMLDivElement;
   private notificationTimeout: number | null = null;
 
   constructor() {

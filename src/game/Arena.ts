@@ -4,7 +4,7 @@ export class Arena {
   private scene: THREE.Scene;
   private gridSize: number = 50;
   private walls: THREE.Mesh[] = [];
-  private floor: THREE.Mesh;
+  private _floor!: THREE.Mesh;
   private particles: THREE.InstancedMesh | null = null;
   private spaceDebris: THREE.Group[] = [];
   private asteroids: THREE.Mesh[] = [];
@@ -243,7 +243,7 @@ export class Arena {
     this.spacePlatform.add(core);
     
     this.scene.add(this.spacePlatform);
-    this.floor = platform; // Keep reference for compatibility
+    this._floor = platform; // Keep reference for compatibility
   }
 
   private createWalls(): void {
@@ -798,7 +798,7 @@ export class Arena {
     this.scene.background = null;
   }
 
-  public update(deltaTime: number, camera?: THREE.Camera): void {
+  public update(deltaTime: number, _camera?: THREE.Camera): void {
     this.time += deltaTime;
 
     // Update skybox shader
