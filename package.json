@@ -1,0 +1,42 @@
+{
+  "name": "nexus-eternal",
+  "private": true,
+  "version": "0.0.1",
+  "description": "A cyberpunk boss rush game built with Three.js and TypeScript",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "three": "^0.167.1",
+    "postprocessing": "^6.35.6",
+    "howler": "^2.2.4",
+    "stats.js": "^0.17.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.167.2",
+    "@types/stats.js": "^0.17.3",
+    "@types/howler": "^2.2.11",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "game",
+    "three.js",
+    "typescript",
+    "cyberpunk",
+    "vite"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
