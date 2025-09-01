@@ -4,7 +4,7 @@ export class Arena {
   private scene: THREE.Scene;
   private gridSize: number = 50;
   private walls: THREE.Mesh[] = [];
-  private _floor!: THREE.Mesh;
+  // private _floor!: THREE.Mesh; // Kept for future compatibility
   private particles: THREE.InstancedMesh | null = null;
   private spaceDebris: THREE.Group[] = [];
   private asteroids: THREE.Mesh[] = [];
@@ -243,7 +243,7 @@ export class Arena {
     this.spacePlatform.add(core);
     
     this.scene.add(this.spacePlatform);
-    this._floor = platform; // Keep reference for compatibility
+    // this._floor = platform; // Keep reference for compatibility
   }
 
   private createWalls(): void {

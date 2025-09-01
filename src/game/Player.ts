@@ -29,7 +29,7 @@ export class Player {
   
   private scene: THREE.Scene;
   private input: PlayerInput;
-  private lastInputDirection: THREE.Vector3 = new THREE.Vector3(0, 0, -1);
+  // private lastInputDirection: THREE.Vector3 = new THREE.Vector3(0, 0, -1); // For future use
   private textureManager: TextureManager;
   
   // Movement constants optimized for responsive combat feel
@@ -621,7 +621,7 @@ export class Player {
     }
     
     if (moveDirection.length() > 0) {
-      this.lastInputDirection = moveDirection.clone();
+      // this.lastInputDirection = moveDirection.clone(); // For future use
       this.velocity = moveDirection.multiplyScalar(moveSpeed);
     } else {
       this.velocity.set(0, 0, 0);

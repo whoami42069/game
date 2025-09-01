@@ -39,7 +39,7 @@ export class Game {
   private clock: THREE.Clock;
   private stats: Stats;
   
-  private _loadingManager!: LoadingManager;
+  // private _loadingManager!: LoadingManager; // For future use
   private audioManager: AudioManager;
   private inputManager: InputManager;
   private uiManager: UIManager;
@@ -66,7 +66,7 @@ export class Game {
 
   constructor(config: GameConfig) {
     this.canvas = config.canvas;
-    this._loadingManager = config.loadingManager; // Used in constructor
+    // this._loadingManager = config.loadingManager; // For future use
     this.audioManager = config.audioManager;
     this.inputManager = config.inputManager;
     this.uiManager = config.uiManager;
