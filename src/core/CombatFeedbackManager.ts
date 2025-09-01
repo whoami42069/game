@@ -24,12 +24,10 @@ export interface HitFlashOptions {
 export class CombatFeedbackManager {
   private scene: THREE.Scene;
   private camera: THREE.Camera;
-  private renderer: THREE.WebGLRenderer;
   
   // Hitstop state
   private isHitStopped: boolean = false;
   private hitStopEndTime: number = 0;
-  private pausedClock: THREE.Clock;
   
   // Screen shake state
   private isShaking: boolean = false;
@@ -45,11 +43,9 @@ export class CombatFeedbackManager {
   private activeAnimations: Set<number> = new Set();
   private maxActiveParticles: number = 5;
   
-  constructor(scene: THREE.Scene, camera: THREE.Camera, renderer: THREE.WebGLRenderer) {
+  constructor(scene: THREE.Scene, camera: THREE.Camera, _renderer: THREE.WebGLRenderer) {
     this.scene = scene;
     this.camera = camera;
-    this.renderer = renderer;
-    this.pausedClock = new THREE.Clock();
     this.originalCameraPosition = new THREE.Vector3();
   }
   

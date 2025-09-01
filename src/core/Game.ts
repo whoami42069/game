@@ -15,15 +15,6 @@ import { PostProcessingManager } from './PostProcessingManager';
 import { CombatFeedbackManager } from './CombatFeedbackManager';
 import { PerformanceMonitor } from './PerformanceUtils';
 
-// Mock type for missing PooledProjectile
-interface PooledProjectile {
-  mesh: THREE.Mesh;
-  isActive: boolean;
-  owner: string;
-  damage: number;
-  initialize(position: THREE.Vector3, velocity: THREE.Vector3, damage: number, owner: string, lifetime: number): void;
-  update(deltaTime: number): boolean;
-}
 
 export interface GameConfig {
   canvas: HTMLCanvasElement;
@@ -95,6 +86,8 @@ export class Game {
   private animationFrames: Set<number> = new Set();
   private createdElements: HTMLElement[] = [];
   private eventListeners: Array<{ target: EventTarget, type: string, listener: EventListener }> = [];
+  private frameCount: number = 0;
+  private lastGCTime: number = 0;
   
   // Track safe timer/interval wrappers
   private safeSetTimeout(callback: () => void, delay: number): number {
@@ -106,20 +99,6 @@ export class Game {
     return id;
   }
   
-  private safeSetInterval(callback: () => void, delay: number): number {
-    const id = setInterval(callback, delay) as any;
-    this.intervals.add(id);
-    return id;
-  }
-  
-  private trackAnimationFrame(callback: FrameRequestCallback): number {
-    const id = requestAnimationFrame((time) => {
-      this.animationFrames.delete(id);
-      callback(time);
-    });
-    this.animationFrames.add(id);
-    return id;
-  }
   
   // Missing properties referenced in code - using mock implementations
   private memoryManager: any = {
@@ -139,7 +118,6 @@ export class Game {
     },
     getStats: () => ({})
   };
-  private pooledProjectiles: any[] = [];
   private performanceManager: any = {
     optimizer: {
       getOptimizationLevels: () => ({})
@@ -686,8 +664,6 @@ export class Game {
     }
     this.projectiles.length = 0;
     
-    // Clear pooled projectiles
-    this.pooledProjectiles.length = 0;
     
     // Dispose post-processing resources
     if (this.postProcessingManager) {
@@ -739,6 +715,17 @@ export class Game {
 
   private gameLoop(): void {
     if (!this.isRunning) return;
+    
+    this.frameCount++;
+    
+    // Periodic cleanup every 600 frames (~10 seconds at 60fps)
+    if (this.frameCount % 600 === 0) {
+      const now = Date.now();
+      if (now - this.lastGCTime > 10000) {
+        this.lastGCTime = now;
+        this.cleanupDeadReferences();
+      }
+    }
     
     this.stats.begin();
     
@@ -845,7 +832,7 @@ export class Game {
           minion.update(this.player.position, modifiedDeltaTime);
           
           // Check if minion projectiles hit player
-          if (minion.checkProjectileCollision(this.player.mesh)) {
+          if (minion.checkProjectileCollision(this.player.mesh as any)) {
             this.player.takeDamage(5); // Minion projectile damage
             if (this.combatFeedbackManager) {
               this.combatFeedbackManager.triggerHitStop({ duration: 50, intensity: 0.3 });
@@ -896,12 +883,7 @@ export class Game {
         
         // Update performance debug info (only in debug mode)
         if (window.location.hash.includes('debug')) {
-          const perfMetrics = {
-            memoryUsage: this.memoryManager.getMemoryInfo().jsHeapSize,
-            poolStats: this.objectPoolManager.getStats(),
-            optimizationLevels: this.performanceManager.optimizer.getOptimizationLevels()
-          };
-          // this.gameUI.updatePerformanceMetrics(perfMetrics); // Method not implemented
+          // Performance metrics disabled for now
         }
       }
       
@@ -959,12 +941,7 @@ export class Game {
         
         // Update performance debug info (only in debug mode)
         if (window.location.hash.includes('debug')) {
-          const perfMetrics = {
-            memoryUsage: this.memoryManager?.getMemoryInfo().jsHeapSize || 0,
-            poolStats: this.objectPoolManager?.getStats() || {},
-            optimizationLevels: this.performanceManager?.optimizer?.getOptimizationLevels() || {}
-          };
-          // this.gameUI.updatePerformanceMetrics(perfMetrics); // Method not implemented
+          // Performance metrics disabled for now
         }
       }
       
@@ -1120,36 +1097,6 @@ export class Game {
         }
       }
     }
-    
-    // Check pooled projectile collisions (optimized)
-    for (let i = this.pooledProjectiles.length - 1; i >= 0; i--) {
-      const projectile = this.pooledProjectiles[i];
-      if (!projectile.isActive) continue;
-      
-      if (projectile.owner === 'player') {
-        // Check collision with boss
-        const distance = projectile.mesh.position.distanceTo(this.boss.position);
-        if (distance < 2) {
-          this.handlePlayerHit(projectile.damage, projectile.mesh.position.clone());
-          
-          // Return projectile to pool
-          this.scene.remove(projectile.mesh);
-          this.objectPoolManager.projectilePool.release(projectile);
-          this.pooledProjectiles.splice(i, 1);
-        }
-      } else if (projectile.owner === 'boss') {
-        // Check collision with player
-        const distance = projectile.mesh.position.distanceTo(this.player.position);
-        if (distance < 1.5) {
-          this.handleBossHit(projectile.damage, projectile.mesh.position.clone());
-          
-          // Return projectile to pool
-          this.scene.remove(projectile.mesh);
-          this.objectPoolManager.projectilePool.release(projectile);
-          this.pooledProjectiles.splice(i, 1);
-        }
-      }
-    }
   }
   
   private handlePlayerHit(damage: number, hitPosition: THREE.Vector3): void {
@@ -1239,8 +1186,7 @@ export class Game {
   }
 
   private showLevelAnnouncement(level: number): void {
-    const frame1 = requestAnimationFrame(() => {
-      this.animationFrames.delete(frame1);
+    requestAnimationFrame(() => {
       const announcement = document.createElement('div');
       announcement.className = 'level-announcement';
       announcement.style.cssText = `
@@ -1263,8 +1209,7 @@ export class Game {
       this.createdElements.push(announcement);
       
       // Trigger animation on next frame
-      const frame2 = requestAnimationFrame(() => {
-        this.animationFrames.delete(frame2);
+      requestAnimationFrame(() => {
         announcement.style.transform = 'translate(-50%, -50%) scale(1)';
         announcement.style.opacity = '1';
         
@@ -1283,9 +1228,7 @@ export class Game {
         }, 2000) as any;
         this.timers.add(timer1);
       });
-      this.animationFrames.add(frame2);
     });
-    this.animationFrames.add(frame1);
   }
 
   private createHitEffect(position: THREE.Vector3): void {
@@ -1536,6 +1479,20 @@ export class Game {
     lookTarget.z += Math.cos(playerRotation) * 2;
     
     this.camera.lookAt(lookTarget);
+  }
+  
+  private cleanupDeadReferences(): void {
+    // Remove dead minions
+    this.minions = this.minions.filter(m => !m.getIsDead());
+    
+    // Clean up completed timers
+    for (const timer of this.timers) {
+      // Timer already executed, just remove from set
+      this.timers.delete(timer);
+    }
+    
+    // Clean up orphaned DOM elements
+    this.createdElements = this.createdElements.filter(el => document.body.contains(el));
   }
   
   // Getters for other systems to access core components

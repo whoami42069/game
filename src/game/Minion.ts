@@ -12,11 +12,12 @@ export class Minion {
     private spawnProtectionDuration: number = 2000; // 2 seconds spawn protection
     private projectiles: THREE.Mesh[] = [];
     private dropChance: number = 0.05; // 5% drop chance
-    private bodyMaterial: THREE.MeshPhysicalMaterial;
+    private bodyMaterial!: THREE.MeshPhysicalMaterial;
     private position: THREE.Vector3;
-    private core: THREE.Mesh;
+    private core!: THREE.Mesh;
     private rings: THREE.Mesh[] = [];
     private particleSystem: THREE.Points | null = null;
+    private activeAnimations: Set<number> = new Set();
 
     constructor(scene: THREE.Scene, position: THREE.Vector3) {
         this.scene = scene;
@@ -77,10 +78,9 @@ export class Minion {
         
         // Spawn animation
         this.mesh.scale.set(0, 0, 0);
-        const startScale = { x: 0, y: 0, z: 0 };
-        const endScale = { x: 1, y: 1, z: 1 };
         const duration = 500;
         const startTime = Date.now();
+        let animId: number;
         
         const animateSpawn = () => {
             const elapsed = Date.now() - startTime;
@@ -89,7 +89,10 @@ export class Minion {
             this.mesh.scale.set(scale, scale, scale);
             
             if (progress < 1) {
-                requestAnimationFrame(animateSpawn);
+                animId = requestAnimationFrame(animateSpawn);
+                this.activeAnimations.add(animId);
+            } else {
+                this.activeAnimations.delete(animId);
             }
         };
         animateSpawn();
@@ -187,14 +190,16 @@ export class Minion {
         // Create neon purple projectile
         const projectileGeometry = new THREE.SphereGeometry(0.15, 8, 8);
         const projectileMaterial = new THREE.MeshBasicMaterial({
-            color: new THREE.Color(1, 0, 1), // Neon purple
-            emissive: new THREE.Color(1, 0, 1),
-            emissiveIntensity: 10
+            color: new THREE.Color(1, 0, 1) // Neon purple
         });
         
         const projectile = new THREE.Mesh(projectileGeometry, projectileMaterial);
         projectile.position.copy(this.mesh.position);
         projectile.position.y += 0.5;
+        
+        // Add glow effect to projectile
+        const projectileLight = new THREE.PointLight(0xff00ff, 0.5, 3);
+        projectile.add(projectileLight);
         
         // Calculate direction
         const direction = targetPosition.clone().sub(projectile.position).normalize();
@@ -225,6 +230,7 @@ export class Minion {
         // Animate and destroy
         const startTime = Date.now();
         const duration = 200;
+        let animId: number;
         
         const animate = () => {
             const elapsed = Date.now() - startTime;
@@ -233,11 +239,13 @@ export class Minion {
             if (progress < 1) {
                 flash.scale.setScalar(1 + progress * 2);
                 flashMaterial.opacity = 0.8 * (1 - progress);
-                requestAnimationFrame(animate);
+                animId = requestAnimationFrame(animate);
+                this.activeAnimations.add(animId);
             } else {
                 this.scene.remove(flash);
                 flashGeometry.dispose();
                 flashMaterial.dispose();
+                if (animId) this.activeAnimations.delete(animId);
             }
         };
         animate();
@@ -312,6 +320,7 @@ export class Minion {
         // Death animation then dispose
         const startTime = Date.now();
         const duration = 300;
+        let animId: number;
         
         const animateDeath = () => {
             const elapsed = Date.now() - startTime;
@@ -321,8 +330,10 @@ export class Minion {
             this.mesh.scale.set(scale, scale, scale);
             
             if (progress < 1) {
-                requestAnimationFrame(animateDeath);
+                animId = requestAnimationFrame(animateDeath);
+                this.activeAnimations.add(animId);
             } else {
+                if (animId) this.activeAnimations.delete(animId);
                 this.dispose();
             }
         };
@@ -395,11 +406,14 @@ export class Minion {
             material.opacity = 1 - progress;
             
             if (progress < 1) {
-                requestAnimationFrame(animate);
+                const animId = requestAnimationFrame(animate);
+                this.activeAnimations.add(animId);
             } else {
                 this.scene.remove(explosion);
                 geometry.dispose();
                 material.dispose();
+                // Clear all tracked animations
+                this.activeAnimations.clear();
             }
         };
         animate();
@@ -440,6 +454,10 @@ export class Minion {
     }
 
     public dispose(): void {
+        // Cancel all running animations
+        this.activeAnimations.forEach(id => cancelAnimationFrame(id));
+        this.activeAnimations.clear();
+        
         // Remove mesh from scene
         if (this.mesh.parent) {
             this.mesh.parent.remove(this.mesh);
