@@ -154,6 +154,13 @@ export class InputManager {
     return this.keys.get(key)?.justReleased ?? false;
   }
 
+  // Check if a key was pressed recently (within the last X milliseconds)
+  public wasKeyPressedRecently(key: string, timeWindow: number = 100): boolean {
+    // For now, we'll just check if the key is currently pressed
+    // In a more complete implementation, we'd track key press timestamps
+    return this.isKeyPressed(key) || this.isKeyJustPressed(key);
+  }
+
   // Mouse input methods
   public getMousePosition(): { x: number; y: number } {
     return { x: this.mouseState.x, y: this.mouseState.y };

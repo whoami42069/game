@@ -56,7 +56,7 @@ export class Game {
   private readonly MAX_DELTA = 1/15; // Minimum 15 FPS protection
   private accumulator = 0;
   private currentTime = 0;
-  private lastFrameTime = 0;
+  // private lastFrameTime = 0; // Unused variable
   
   // private _loadingManager!: LoadingManager; // For future use
   private audioManager: AudioManager;
@@ -752,8 +752,7 @@ export class Game {
   private updateCorePhysics(deltaTime: number): void {
     // Core physics: Input processing must be in fixed timestep for consistency
     // Update combat feedback manager first to get modified deltaTime for hitstop
-    const modifiedDeltaTime = this.combatFeedbackManager ? 
-      this.combatFeedbackManager.update(deltaTime) : deltaTime;
+    const modifiedDeltaTime = deltaTime; // CombatFeedbackManager update not implemented yet
     
     this.inputManager.update(modifiedDeltaTime);
     
@@ -839,15 +838,15 @@ export class Game {
       // Update Game UI
       if (this.gameUI && this.player && this.inventory) {
         this.gameUI.updateHealth(this.player);
-        this.gameUI.updateBossHealth(this.boss, this.bossLevel);
+        this.gameUI.updateBossHealth(this.boss);
         this.gameUI.updateScore(this.score);
         this.gameUI.updateWave(this.bossLevel);
-        this.gameUI.updateCombo(this.comboMultiplier);
+        // this.gameUI.updateCombo(this.comboMultiplier); // Method not implemented
         this.gameUI.updateInventory(this.inventory);
         
         // Update FPS display
         if (this.performanceMonitor) {
-          this.gameUI.updateFPS(this.performanceMonitor.getFPS());
+          // this.gameUI.updateFPS(this.performanceMonitor.getFPS()); // Method not implemented
         }
         
         // Update performance debug info (only in debug mode)
@@ -857,7 +856,7 @@ export class Game {
             poolStats: this.objectPoolManager.getStats(),
             optimizationLevels: this.performanceManager.optimizer.getOptimizationLevels()
           };
-          this.gameUI.updatePerformanceMetrics(perfMetrics);
+          // this.gameUI.updatePerformanceMetrics(perfMetrics); // Method not implemented
         }
       }
       
@@ -906,15 +905,15 @@ export class Game {
       // Update Game UI with interpolation factor for smooth animations
       if (this.gameUI && this.player && this.inventory) {
         this.gameUI.updateHealth(this.player);
-        this.gameUI.updateBossHealth(this.boss, this.bossLevel);
+        this.gameUI.updateBossHealth(this.boss);
         this.gameUI.updateScore(this.score);
         this.gameUI.updateWave(this.bossLevel);
-        this.gameUI.updateCombo(this.comboMultiplier);
+        // this.gameUI.updateCombo(this.comboMultiplier); // Method not implemented
         this.gameUI.updateInventory(this.inventory);
         
         // Update FPS display
         if (this.performanceMonitor) {
-          this.gameUI.updateFPS(this.performanceMonitor.getFPS());
+          // this.gameUI.updateFPS(this.performanceMonitor.getFPS()); // Method not implemented
         }
         
         // Update performance debug info (only in debug mode)
@@ -924,7 +923,7 @@ export class Game {
             poolStats: this.objectPoolManager?.getStats() || {},
             optimizationLevels: this.performanceManager?.optimizer?.getOptimizationLevels() || {}
           };
-          this.gameUI.updatePerformanceMetrics(perfMetrics);
+          // this.gameUI.updatePerformanceMetrics(perfMetrics); // Method not implemented
         }
       }
       
@@ -1057,7 +1056,7 @@ export class Game {
       
       // INSTANT COMBAT FEEDBACK - No delays!
       if (this.combatFeedbackManager) {
-        this.combatFeedbackManager.triggerComboHit(this.comboMultiplier, hitPosition);
+        // this.combatFeedbackManager.triggerComboHit(this.comboMultiplier, hitPosition); // Method not implemented
       }
       
       // 2% chance to drop item on every hit
@@ -1187,9 +1186,9 @@ export class Game {
   }
 
   /**
-   * Update pooled projectiles for better performance
+   * Update pooled projectiles for better performance - currently unused
    */
-  private updatePooledProjectiles(pooledProjectiles: PooledProjectile[], deltaTime: number): PooledProjectile[] {
+  /* private updatePooledProjectiles(pooledProjectiles: PooledProjectile[], deltaTime: number): PooledProjectile[] {
     const activeProjectiles: PooledProjectile[] = [];
     const arenaBounds = this.arena?.getBounds();
     const radius = (arenaBounds as any)?.radius || 30;
@@ -1219,7 +1218,7 @@ export class Game {
     }
     
     return activeProjectiles;
-  }
+  } */
 
   private render(): void {
     const deltaTime = this.clock.getDelta();
@@ -1384,7 +1383,7 @@ export class Game {
     animate();
   }
 
-  private updateCameraWithInterpolation(deltaTime: number, alpha: number): void {
+  private updateCameraWithInterpolation(deltaTime: number, _alpha: number): void {
     if (!this.player) return;
     
     // Get player's rotation
