@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 export class Arena {
   private scene: THREE.Scene;
-  private gridSize: number = 50;
+  private gridSize: number = 60;
   private walls: THREE.Mesh[] = [];
   // private _floor!: THREE.Mesh; // Kept for future compatibility
   private particles: THREE.InstancedMesh | null = null;
@@ -247,35 +247,70 @@ export class Arena {
   }
 
   private createWalls(): void {
-    // Create invisible boundary walls (just for collision, not visible)
-    const wallHeight = 15;
-    const wallThickness = 1;
+    // Create invisible cylindrical boundary matching the circular platform
+    const wallHeight = 50;
+    const platformRadius = this.gridSize * 0.4; // Match the actual platform radius
     
-    // Make walls almost invisible - just a slight shimmer
+    // Completely invisible wall material
     const wallMaterial = new THREE.MeshBasicMaterial({
       color: 0x000033,
       transparent: true,
-      opacity: 0.05,
+      opacity: 0,
       side: THREE.DoubleSide
     });
 
-    // Create four walls
-    const positions = [
-      { x: 0, z: -this.gridSize/2, rotation: 0 },
-      { x: 0, z: this.gridSize/2, rotation: 0 },
-      { x: -this.gridSize/2, z: 0, rotation: Math.PI/2 },
-      { x: this.gridSize/2, z: 0, rotation: Math.PI/2 }
-    ];
-
-    positions.forEach(pos => {
-      const geometry = new THREE.BoxGeometry(this.gridSize, wallHeight, wallThickness);
-      const wall = new THREE.Mesh(geometry, wallMaterial);
-      wall.position.set(pos.x, wallHeight/2, pos.z);
-      wall.rotation.y = pos.rotation;
-      wall.visible = false; // Make walls invisible but still act as boundaries
-      this.walls.push(wall);
-      // Don't add to scene since they're just for boundary detection
-    });
+    // Create cylindrical boundary wall
+    const wallGeometry = new THREE.CylinderGeometry(
+      platformRadius + 2,  // Slightly larger than platform
+      platformRadius + 2,  // Same radius top and bottom
+      wallHeight,
+      32  // Smooth cylinder with 32 segments
+    );
+    const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+    wall.position.y = wallHeight/2;
+    wall.name = 'boundary-cylinder';
+    // Make it a hollow cylinder for collision detection on the edges only
+    const innerGeometry = new THREE.CylinderGeometry(
+      platformRadius - 1,
+      platformRadius - 1,
+      wallHeight,
+      32
+    );
+    const innerWall = new THREE.Mesh(innerGeometry, wallMaterial);
+    wall.updateMatrix();
+    innerWall.updateMatrix();
+    
+    // For collision, we'll use the outer cylinder
+    this.walls.push(wall);
+    this.scene.add(wall);
+    
+    // Add floor boundary
+    const floorGeometry = new THREE.CylinderGeometry(
+      platformRadius + 2,
+      platformRadius + 2,
+      1,
+      32
+    );
+    const floor = new THREE.Mesh(floorGeometry, wallMaterial);
+    floor.position.y = -1;
+    floor.name = 'boundary-floor';
+    floor.visible = false;
+    this.walls.push(floor);
+    this.scene.add(floor);
+    
+    // Add ceiling boundary
+    const ceilingGeometry = new THREE.CylinderGeometry(
+      platformRadius + 2,
+      platformRadius + 2,
+      1,
+      32
+    );
+    const ceiling = new THREE.Mesh(ceilingGeometry, wallMaterial);
+    ceiling.position.y = wallHeight;
+    ceiling.name = 'boundary-ceiling';
+    ceiling.visible = false;
+    this.walls.push(ceiling);
+    this.scene.add(ceiling);
   }
 
   private createSpaceLighting(): void {
@@ -931,11 +966,16 @@ export class Arena {
   }
 
 
-  public getBounds(): { min: THREE.Vector3, max: THREE.Vector3 } {
-    const halfSize = this.gridSize / 2 - 2;
+  public getBounds(): { min: THREE.Vector3, max: THREE.Vector3, radius?: number } {
+    const platformRadius = this.gridSize * 0.4; // Actual platform radius
     return {
-      min: new THREE.Vector3(-halfSize, 0, -halfSize),
-      max: new THREE.Vector3(halfSize, 20, halfSize)
+      min: new THREE.Vector3(-platformRadius, 0, -platformRadius),
+      max: new THREE.Vector3(platformRadius, 45, platformRadius),
+      radius: platformRadius // Add radius for circular boundary checking
     };
+  }
+  
+  public getWalls(): THREE.Mesh[] {
+    return this.walls;
   }
 }
