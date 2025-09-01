@@ -122,8 +122,8 @@ export class Arena {
   private createSpacePlatform(): void {
     this.spacePlatform = new THREE.Group();
     
-    // Main platform base - transparent metallic
-    const platformGeometry = new THREE.CylinderGeometry(this.gridSize * 0.4, this.gridSize * 0.35, 2, 32);
+    // Main platform base - simple circular platform
+    const platformGeometry = new THREE.CylinderGeometry(this.gridSize * 0.4, this.gridSize * 0.35, 2, 16);
     const platformMaterial = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0 },
@@ -154,11 +154,10 @@ export class Arena {
         varying vec2 vUv;
         
         void main() {
-          // Hexagonal grid pattern
-          vec2 coord = vUv * 12.0;
-          vec2 grid = abs(fract(coord) - 0.5);
-          float hexPattern = max(grid.x, grid.y);
-          hexPattern = smoothstep(0.4, 0.45, hexPattern);
+          // Simple surface pattern
+          vec2 coord = vUv * 8.0;
+          float pattern = sin(coord.x * 3.14159) * sin(coord.y * 3.14159) * 0.5 + 0.5;
+          pattern = smoothstep(0.3, 0.7, pattern);
           
           // Rim lighting effect
           vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
@@ -169,7 +168,7 @@ export class Arena {
           float pulse = sin(time * 2.0 + length(vUv - 0.5) * 8.0) * 0.5 + 0.5;
           vec3 color = mix(coreColor, rimColor, pulse);
           
-          float finalOpacity = (hexPattern + rim * 0.5) * opacity;
+          float finalOpacity = (pattern + rim * 0.5) * opacity;
           gl_FragColor = vec4(color, finalOpacity);
         }
       `,
@@ -776,12 +775,10 @@ export class Arena {
       // Set random colors using instanced color attribute
       const color = new THREE.Color();
       const colorChoice = Math.random();
-      if (colorChoice < 0.33) {
+      if (colorChoice < 0.5) {
         color.setHex(0x00ffff); // Cyan
-      } else if (colorChoice < 0.66) {
-        color.setHex(0xff00ff); // Magenta
       } else {
-        color.setHex(0x00ff00); // Green
+        color.setHex(0xff00ff); // Magenta
       }
       this.particles.setColorAt(i, color);
     }

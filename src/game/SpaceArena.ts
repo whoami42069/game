@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TextureManager } from '@/core/TextureManager';
+import { BillboardManager } from '@/core/BillboardManager';
 
 export class SpaceArena {
   private scene: THREE.Scene;
@@ -13,11 +14,13 @@ export class SpaceArena {
   private time: number = 0;
   private platformSize: number = 40;
   private textureManager: TextureManager;
+  private billboardManager: BillboardManager;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
     this.platform = new THREE.Group();
     this.textureManager = TextureManager.getInstance();
+    this.billboardManager = new BillboardManager(scene);
     
     this.createSpaceSkybox();
     this.createStarField();
@@ -30,6 +33,7 @@ export class SpaceArena {
     this.createSpaceLighting();
     this.createPlanets();
     this.setupSpaceAtmosphere();
+    this.createBillboards();
   }
 
   private createSpaceSkybox(): void {
@@ -211,16 +215,16 @@ export class SpaceArena {
   }
 
   private createSpacePlatform(): void {
-    // Main platform with metallic hexagonal pattern
+    // Main platform with simple circular geometry
     const platformGeometry = new THREE.CylinderGeometry(
       this.platformSize, 
       this.platformSize * 0.8, 
       2, 
-      6
+      16
     );
     
-    // Get AAA-quality PBR textures
-    const platformTextures = this.textureManager.generatePlatformTexture(1024);
+    // Get platform textures
+    const platformTextures = this.textureManager.generatePlatformTexture(512);
     
     const platformMaterial = new THREE.MeshPhysicalMaterial({
       map: platformTextures.diffuse,
@@ -229,31 +233,11 @@ export class SpaceArena {
       roughnessMap: platformTextures.roughness,
       metalnessMap: platformTextures.metalness,
       
-      // Enhanced PBR properties for AAA quality
-      metalness: 0.95,
-      roughness: 0.05,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.03,
-      reflectivity: 1,
-      
-      // Subtle transparency and glow
-      transparent: true,
-      opacity: 0.95,
+      // Simple material properties
+      metalness: 0.3,
+      roughness: 0.7,
       emissive: 0x001122,
-      emissiveIntensity: 0.3,
-      
-      // IBL and reflection enhancement
-      envMapIntensity: 2.0,
-      ior: 1.5,
-      transmission: 0.05,
-      thickness: 0.5,
-      
-      // Advanced specular properties
-      specularIntensity: 1.2,
-      specularColor: new THREE.Color(0x00ccff),
-      
-      // Anisotropic filtering for sharp textures at distance
-      side: THREE.DoubleSide
+      emissiveIntensity: 0.1
     });
     
     const platform = new THREE.Mesh(platformGeometry, platformMaterial);
@@ -276,28 +260,7 @@ export class SpaceArena {
     core.position.y = 0;
     this.platform.add(core);
     
-    // Add platform rings
-    for (let i = 1; i <= 3; i++) {
-      const ringGeometry = new THREE.TorusGeometry(
-        this.platformSize * (0.3 + i * 0.2), 
-        0.5, 
-        8, 
-        6
-      );
-      const ringMaterial = new THREE.MeshPhysicalMaterial({
-        color: i % 2 === 0 ? 0xff00ff : 0x00ff88,
-        emissive: i % 2 === 0 ? 0xff00ff : 0x00ff88,
-        emissiveIntensity: 0.3,
-        metalness: 0.8,
-        roughness: 0.2,
-        transparent: true,
-        opacity: 0.6
-      });
-      const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-      ring.position.y = 0;
-      ring.rotation.x = Math.PI / 2;
-      this.platform.add(ring);
-    }
+    // Border removed - no longer needed
     
     this.scene.add(this.platform);
   }
@@ -671,8 +634,23 @@ export class SpaceArena {
     this.platform.add(textMesh2);
   }
 
+  /**
+   * Create professional billboards
+   */
+  private createBillboards(): void {
+    this.billboardManager.initialize();
+    
+    // Initial BTC price fetch
+    setTimeout(() => {
+      this.billboardManager.updateSwitchboardPrice();
+    }, 1000);
+  }
+
   public update(deltaTime: number): void {
     this.time += deltaTime;
+    
+    // Update billboard system
+    this.billboardManager.update(deltaTime);
     
     // Rotate stars slowly
     if (this.stars) {
@@ -698,12 +676,11 @@ export class SpaceArena {
       core.scale.setScalar(scale);
     }
     
-    // Rotate platform rings
-    this.platform.children.forEach((child, index) => {
-      if (child.geometry instanceof THREE.TorusGeometry) {
-        child.rotation.z += deltaTime * (0.2 + index * 0.1);
-      }
-    });
+    // Rotate platform border
+    const border = this.platform.children.find(child => child.geometry instanceof THREE.TorusGeometry);
+    if (border) {
+      border.rotation.z += deltaTime * 0.3;
+    }
     
     // Animate asteroids
     this.asteroids.forEach((asteroid, i) => {
@@ -775,5 +752,20 @@ export class SpaceArena {
       min: new THREE.Vector3(-halfSize, 0, -halfSize),
       max: new THREE.Vector3(halfSize, 30, halfSize)
     };
+  }
+
+  /**
+   * Get billboard manager for external access
+   */
+  public getBillboardManager(): BillboardManager {
+    return this.billboardManager;
+  }
+
+  /**
+   * Dispose all resources
+   */
+  public dispose(): void {
+    this.billboardManager.dispose();
+    console.log('✅ Space Arena disposed');
   }
 }
