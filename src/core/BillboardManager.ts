@@ -29,14 +29,14 @@ export class BillboardManager {
   public initialize(): void {
     this.createSwitchboardBillboard();
     this.createMonadBillboard();
-    console.log('🏮 Billboard Manager initialized with SWITCHBOARD and MONAD billboards');
+    console.log('🏮 Billboard Manager initialized with futuristic SWITCHBOARD and MONAD billboards');
     
     // Start automatic price updates every 15 seconds
     this.startPriceUpdates();
   }
 
   /**
-   * Create the SWITCHBOARD billboard with purple to blue gradient
+   * Create the SWITCHBOARD billboard with futuristic purple to blue gradient
    */
   private createSwitchboardBillboard(): void {
     const config: BillboardConfig = {
@@ -47,12 +47,18 @@ export class BillboardManager {
         primary: '#9d00ff',     // Purple
         secondary: '#0099ff',   // Blue
         text: '#ffffff',        // White text
-        glow: '#00ffff'        // Cyan glow
+        glow: '#00ffff',       // Cyan glow
+        accent: '#1a1a2e',      // Dark metallic frame
+        hologram: '#00ffff'     // Cyan hologram
       },
-      position: new THREE.Vector3(-60, 20, -60), // Lowered position, left side
+      position: new THREE.Vector3(-60, 25, -60), // Elevated position for better visibility
       rotation: new THREE.Euler(0, Math.PI / 8, 0), // Slight angle toward center
       enableGradient: true,
-      gradientDirection: 'horizontal'
+      gradientDirection: 'horizontal',
+      enableHologram: true,
+      enableScanlines: true,
+      enableParticles: true,
+      glitchIntensity: 0.002  // Occasional glitch effect
     };
 
     const switchboardBillboard = new Billboard3D(config);
@@ -91,7 +97,7 @@ export class BillboardManager {
   }
 
   /**
-   * Create the MONAD billboard with purple theme
+   * Create the MONAD billboard with futuristic purple theme
    */
   private createMonadBillboard(): void {
     const config: BillboardConfig = {
@@ -102,12 +108,18 @@ export class BillboardManager {
         primary: '#6d00cc',     // Deep purple
         secondary: '#9d00ff',   // Lighter purple (subtle gradient)
         text: '#ffffff',        // White text
-        glow: '#cc00ff'        // Pink-purple glow
+        glow: '#cc00ff',       // Pink-purple glow
+        accent: '#16213e',      // Dark blue metallic frame
+        hologram: '#ff00ff'     // Magenta hologram
       },
-      position: new THREE.Vector3(60, 20, -60), // Lowered position, right side
+      position: new THREE.Vector3(60, 25, -60), // Elevated position for better visibility
       rotation: new THREE.Euler(0, -Math.PI / 8, 0), // Slight angle toward center
       enableGradient: true,
-      gradientDirection: 'vertical'
+      gradientDirection: 'vertical',
+      enableHologram: true,
+      enableScanlines: true,
+      enableParticles: true,
+      glitchIntensity: 0.001  // Less glitch than Switchboard
     };
 
     const monadBillboard = new Billboard3D(config);
@@ -302,6 +314,6 @@ export class BillboardManager {
       billboard.dispose();
     });
     this.billboards.clear();
-    console.log('🏮 Billboard Manager disposed');
+    console.log('🏮 Futuristic Billboard Manager disposed');
   }
 }

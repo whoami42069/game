@@ -30,7 +30,7 @@ export class SimpleBoss {
   private currentFlash: THREE.PointLight | null = null; // Track current flash
   private damageAnimationIds: Set<number> = new Set();
   private lastAuraUpdate: number = 0;
-  private auraUpdateInterval: number = 0.033; // ~30fps for aura
+  private auraUpdateInterval: number = 0.066; // ~15fps for aura to reduce CPU load
   
   // Particle pool for damage effects
   private particlePool: { mesh: THREE.Mesh, geometry: THREE.BufferGeometry, material: THREE.Material }[] = [];
@@ -675,15 +675,23 @@ export class SimpleBoss {
       }
     });
     
-    // Animate warp plasma trails
-    if (this.corruptionAura) {
+    // Animate warp plasma trails with optimized updates
+    if (this.corruptionAura && this.corruptionAura.visible) {
       // Only update particle positions at reduced framerate
       this.lastAuraUpdate += deltaTime;
       if (this.lastAuraUpdate >= this.auraUpdateInterval) {
-        const positions = this.corruptionAura.geometry.attributes.position.array as Float32Array;
+        const positionAttribute = this.corruptionAura.geometry.attributes.position;
+        const positions = positionAttribute.array as Float32Array;
+        const updateDelta = this.lastAuraUpdate;
+        
+        // Batch update positions with less random calls
+        const turbulenceX = (Math.random() - 0.5) * updateDelta * 0.8;
+        const turbulenceY = (Math.random() - 0.5) * updateDelta * 0.5;
+        const streamSpeed = updateDelta * 10 * (1 + this.phase * 0.5);
+        
         for (let i = 0; i < positions.length; i += 3) {
           // Stream particles backward
-          positions[i + 2] -= this.lastAuraUpdate * 10 * (1 + this.phase * 0.5);
+          positions[i + 2] -= streamSpeed;
           
           // Reset particles that go too far
           if (positions[i + 2] < -6) {
@@ -691,18 +699,20 @@ export class SimpleBoss {
             const side = i < positions.length / 2 ? -1 : 1;
             positions[i] = side * 2.2 + (Math.random() - 0.5) * 0.2;
             positions[i + 1] = (Math.random() - 0.5) * 0.2;
+          } else {
+            // Add turbulence only to active particles
+            positions[i] += turbulenceX;
+            positions[i + 1] += turbulenceY;
           }
-          
-          // Add turbulence
-          positions[i] += (Math.random() - 0.5) * this.lastAuraUpdate * 0.8;
-          positions[i + 1] += (Math.random() - 0.5) * this.lastAuraUpdate * 0.5;
         }
-        this.corruptionAura.geometry.attributes.position.needsUpdate = true;
+        positionAttribute.needsUpdate = true;
         this.lastAuraUpdate = 0;
       }
       
-      // Pulse opacity based on phase
-      (this.corruptionAura.material as THREE.PointsMaterial).opacity = 0.6 + this.phase * 0.1 + Math.sin(this.time * 4) * 0.2;
+      // Pulse opacity based on phase - less frequent updates
+      if (this.time % 0.1 < deltaTime) {
+        (this.corruptionAura.material as THREE.PointsMaterial).opacity = 0.6 + this.phase * 0.1 + Math.sin(this.time * 4) * 0.2;
+      }
     }
     
     // Update ship lights
@@ -1011,7 +1021,26 @@ export class SimpleBoss {
     }
     if (this.currentFlash) {
       this.scene.remove(this.currentFlash);
+      this.currentFlash.dispose?.();
       this.currentFlash = null;
+    }
+    
+    // Clean up particle pool to prevent memory leak
+    this.particlePool.forEach(particle => {
+      if (particle.mesh.parent) {
+        this.scene.remove(particle.mesh);
+      }
+      particle.geometry.dispose();
+      particle.material.dispose();
+    });
+    this.particlePool = [];
+    
+    // Clean up corruption aura if it exists
+    if (this.corruptionAura) {
+      this.scene.remove(this.corruptionAura);
+      this.corruptionAura.geometry.dispose();
+      (this.corruptionAura.material as THREE.Material).dispose();
+      this.corruptionAura = null;
     }
     
     this.level++;
@@ -1032,28 +1061,19 @@ export class SimpleBoss {
       this.nucleus.material.emissiveIntensity = 0.5 + this.level * 0.1;
     }
     
-    // Defer evolution flash to prevent freezing
-    requestAnimationFrame(() => {
-      const flash = document.createElement('div');
-      flash.style.cssText = `
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(255,100,0,0.2);
-        pointer-events: none;
-        z-index: 999;
-        transition: opacity 0.3s;
-      `;
-      document.body.appendChild(flash);
+    // Use pre-created flash element if available, or skip flash effect
+    const existingFlash = document.getElementById('boss-evolve-flash');
+    if (existingFlash) {
+      existingFlash.style.display = 'block';
+      existingFlash.style.opacity = '0.2';
       
-      // Fade out
       requestAnimationFrame(() => {
-        flash.style.opacity = '0';
-        setTimeout(() => flash.remove(), 300);
+        existingFlash.style.opacity = '0';
+        setTimeout(() => {
+          existingFlash.style.display = 'none';
+        }, 300);
       });
-    });
+    }
     
     this.mesh.visible = true;
   }

@@ -12,11 +12,17 @@ export interface BillboardConfig {
     secondary?: string;
     text: string;
     glow?: string;
+    accent?: string;
+    hologram?: string;
   };
   position: THREE.Vector3;
   rotation?: THREE.Euler;
   enableGradient?: boolean;
   gradientDirection?: 'horizontal' | 'vertical' | 'diagonal';
+  enableHologram?: boolean;
+  enableScanlines?: boolean;
+  enableParticles?: boolean;
+  glitchIntensity?: number;
 }
 
 /**
@@ -40,9 +46,14 @@ export class Billboard3D {
   private material!: THREE.MeshPhysicalMaterial;
   private mesh!: THREE.Mesh;
   private glowMesh!: THREE.Mesh;
+  private hologramMesh?: THREE.Mesh;
+  private frameMesh?: THREE.Mesh;
+  private particleSystem?: THREE.Points;
+  private scanlinesMesh?: THREE.Mesh;
   private config: BillboardConfig;
   private content: BillboardContent;
   private animationTime: number = 0;
+  private glitchTime: number = 0;
   private updateCallback?: () => Promise<BillboardContent>;
 
   constructor(config: BillboardConfig) {
@@ -57,6 +68,20 @@ export class Billboard3D {
     this.initializeCanvas();
     this.createBillboard();
     this.createGlow();
+    this.createFrame();
+    
+    if (config.enableHologram !== false) {
+      this.createHologramEffect();
+    }
+    
+    if (config.enableScanlines !== false) {
+      this.createScanlines();
+    }
+    
+    if (config.enableParticles !== false) {
+      this.createParticleEffect();
+    }
+    
     this.updateTexture();
     
     // Position and rotate the billboard
@@ -90,19 +115,24 @@ export class Billboard3D {
     // Create texture from canvas
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.needsUpdate = true;
+    this.texture.anisotropy = 16;
     
-    // Create professional material with proper lighting
+    // Create futuristic material with enhanced properties
     this.material = new THREE.MeshPhysicalMaterial({
       map: this.texture,
       transparent: true,
       side: THREE.DoubleSide,
-      emissive: new THREE.Color(this.config.colors.primary).multiplyScalar(0.1),
+      emissive: new THREE.Color(this.config.colors.primary).multiplyScalar(0.2),
       emissiveMap: this.texture,
-      metalness: 0.1,
-      roughness: 0.2,
-      clearcoat: 0.8,
-      clearcoatRoughness: 0.1,
-      envMapIntensity: 0.5
+      emissiveIntensity: 0.5,
+      metalness: 0.3,
+      roughness: 0.1,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.05,
+      envMapIntensity: 0.8,
+      transmission: 0.1,
+      thickness: 0.5,
+      ior: 1.5
     });
     
     this.mesh = new THREE.Mesh(geometry, this.material);
@@ -110,19 +140,20 @@ export class Billboard3D {
   }
 
   /**
-   * Create glow effect around the billboard
+   * Create advanced glow effect with energy pulses
    */
   private createGlow(): void {
     const glowGeometry = new THREE.PlaneGeometry(
-      this.config.width * 1.1, 
-      this.config.height * 1.1
+      this.config.width * 1.15, 
+      this.config.height * 1.15
     );
     
     const glowMaterial = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0 },
         color: { value: new THREE.Color(this.config.colors.glow || this.config.colors.primary) },
-        intensity: { value: 0.3 }
+        intensity: { value: 0.4 },
+        resolution: { value: new THREE.Vector2(this.config.width, this.config.height) }
       },
       vertexShader: `
         varying vec2 vUv;
@@ -135,27 +166,52 @@ export class Billboard3D {
         uniform float time;
         uniform vec3 color;
         uniform float intensity;
+        uniform vec2 resolution;
         varying vec2 vUv;
+        
+        float noise(vec2 p) {
+          return sin(p.x * 10.0) * sin(p.y * 10.0);
+        }
         
         void main() {
           vec2 center = vec2(0.5, 0.5);
           float dist = distance(vUv, center);
-          float glow = 1.0 - smoothstep(0.0, 0.7, dist);
           
-          // Pulsing effect
-          float pulse = sin(time * 2.0) * 0.2 + 0.8;
-          glow *= pulse * intensity;
+          // Multi-layered glow
+          float glow1 = 1.0 - smoothstep(0.0, 0.5, dist);
+          float glow2 = 1.0 - smoothstep(0.2, 0.8, dist);
+          float glow3 = 1.0 - smoothstep(0.4, 1.0, dist);
           
-          gl_FragColor = vec4(color, glow);
+          // Energy pulses
+          float pulse1 = sin(time * 2.0) * 0.3 + 0.7;
+          float pulse2 = sin(time * 3.0 + 1.57) * 0.2 + 0.8;
+          float pulse3 = sin(time * 1.5 + 3.14) * 0.25 + 0.75;
+          
+          // Combine glows with different pulse rates
+          float finalGlow = glow1 * pulse1 * 0.5 + glow2 * pulse2 * 0.3 + glow3 * pulse3 * 0.2;
+          
+          // Add edge energy effect
+          float edge = 1.0 - abs(vUv.x - 0.5) * 2.0;
+          edge *= 1.0 - abs(vUv.y - 0.5) * 2.0;
+          edge = pow(edge, 3.0);
+          
+          finalGlow += edge * sin(time * 4.0) * 0.1;
+          finalGlow *= intensity;
+          
+          // Add color variation
+          vec3 finalColor = mix(color, vec3(1.0), finalGlow * 0.3);
+          
+          gl_FragColor = vec4(finalColor, finalGlow);
         }
       `,
       transparent: true,
       blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide
+      side: THREE.DoubleSide,
+      depthWrite: false
     });
     
     this.glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
-    this.glowMesh.position.z = -0.01; // Slightly behind the main billboard
+    this.glowMesh.position.z = -0.02;
     this.group.add(this.glowMesh);
   }
 
@@ -296,6 +352,285 @@ export class Billboard3D {
   }
 
   /**
+   * Create metallic frame around billboard
+   */
+  private createFrame(): void {
+    const frameThickness = 0.5;
+    const frameDepth = 0.3;
+    
+    // Frame material
+    const frameMaterial = new THREE.MeshPhysicalMaterial({
+      color: new THREE.Color(this.config.colors.accent || '#333333'),
+      metalness: 0.9,
+      roughness: 0.1,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.05,
+      emissive: new THREE.Color(this.config.colors.glow || this.config.colors.primary).multiplyScalar(0.1)
+    });
+    
+    // Create frame pieces
+    const frameGroup = new THREE.Group();
+    
+    // Top frame
+    const topFrame = new THREE.Mesh(
+      new THREE.BoxGeometry(this.config.width + frameThickness * 2, frameThickness, frameDepth),
+      frameMaterial
+    );
+    topFrame.position.y = this.config.height / 2 + frameThickness / 2;
+    frameGroup.add(topFrame);
+    
+    // Bottom frame
+    const bottomFrame = new THREE.Mesh(
+      new THREE.BoxGeometry(this.config.width + frameThickness * 2, frameThickness, frameDepth),
+      frameMaterial
+    );
+    bottomFrame.position.y = -this.config.height / 2 - frameThickness / 2;
+    frameGroup.add(bottomFrame);
+    
+    // Left frame
+    const leftFrame = new THREE.Mesh(
+      new THREE.BoxGeometry(frameThickness, this.config.height, frameDepth),
+      frameMaterial
+    );
+    leftFrame.position.x = -this.config.width / 2 - frameThickness / 2;
+    frameGroup.add(leftFrame);
+    
+    // Right frame
+    const rightFrame = new THREE.Mesh(
+      new THREE.BoxGeometry(frameThickness, this.config.height, frameDepth),
+      frameMaterial
+    );
+    rightFrame.position.x = this.config.width / 2 + frameThickness / 2;
+    frameGroup.add(rightFrame);
+    
+    this.frameMesh = frameGroup as any;
+    this.group.add(frameGroup);
+  }
+
+  /**
+   * Create holographic projection effect
+   */
+  private createHologramEffect(): void {
+    const hologramGeometry = new THREE.PlaneGeometry(
+      this.config.width * 0.98,
+      this.config.height * 0.98
+    );
+    
+    const hologramMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0 },
+        color: { value: new THREE.Color(this.config.colors.hologram || '#00ffff') },
+        opacity: { value: 0.15 },
+        scanlineSpeed: { value: 2.0 }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vPosition;
+        uniform float time;
+        
+        void main() {
+          vUv = uv;
+          vPosition = position;
+          
+          // Add wave distortion
+          vec3 pos = position;
+          pos.z += sin(position.y * 10.0 + time * 2.0) * 0.1;
+          pos.z += cos(position.x * 8.0 + time * 1.5) * 0.05;
+          
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float time;
+        uniform vec3 color;
+        uniform float opacity;
+        uniform float scanlineSpeed;
+        varying vec2 vUv;
+        varying vec3 vPosition;
+        
+        float random(vec2 st) {
+          return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+        }
+        
+        void main() {
+          // Holographic scanlines
+          float scanline = sin(vUv.y * 100.0 + time * scanlineSpeed) * 0.04 + 0.96;
+          float scanline2 = sin(vUv.y * 50.0 - time * scanlineSpeed * 0.5) * 0.03 + 0.97;
+          
+          // Interference pattern
+          float interference = sin(vUv.x * 200.0) * sin(vUv.y * 200.0) * 0.05 + 0.95;
+          
+          // Digital noise
+          float noise = random(vUv + time * 0.1) * 0.02 + 0.98;
+          
+          // Edge fade
+          float edgeFade = smoothstep(0.0, 0.05, vUv.x) * smoothstep(1.0, 0.95, vUv.x);
+          edgeFade *= smoothstep(0.0, 0.05, vUv.y) * smoothstep(1.0, 0.95, vUv.y);
+          
+          // Combine effects
+          float alpha = opacity * scanline * scanline2 * interference * noise * edgeFade;
+          
+          // Add chromatic aberration
+          vec3 finalColor = color;
+          finalColor.r += sin(time * 3.0) * 0.1;
+          finalColor.b -= sin(time * 2.0) * 0.1;
+          
+          gl_FragColor = vec4(finalColor, alpha);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    
+    this.hologramMesh = new THREE.Mesh(hologramGeometry, hologramMaterial);
+    this.hologramMesh.position.z = 0.01;
+    this.group.add(this.hologramMesh);
+  }
+
+  /**
+   * Create animated scanlines effect
+   */
+  private createScanlines(): void {
+    const scanlinesGeometry = new THREE.PlaneGeometry(
+      this.config.width,
+      this.config.height
+    );
+    
+    const scanlinesMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0 },
+        color: { value: new THREE.Color('#ffffff') },
+        speed: { value: 1.0 },
+        intensity: { value: 0.05 }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float time;
+        uniform vec3 color;
+        uniform float speed;
+        uniform float intensity;
+        varying vec2 vUv;
+        
+        void main() {
+          // Moving scanlines
+          float scanline1 = sin((vUv.y - time * speed * 0.1) * 400.0) * 0.5 + 0.5;
+          float scanline2 = sin((vUv.y + time * speed * 0.05) * 200.0) * 0.5 + 0.5;
+          
+          // Combine scanlines
+          float scanlines = scanline1 * 0.7 + scanline2 * 0.3;
+          scanlines = pow(scanlines, 2.0);
+          
+          // Fade at edges
+          float fade = smoothstep(0.0, 0.1, vUv.y) * smoothstep(1.0, 0.9, vUv.y);
+          
+          gl_FragColor = vec4(color, scanlines * intensity * fade);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    
+    this.scanlinesMesh = new THREE.Mesh(scanlinesGeometry, scanlinesMaterial);
+    this.scanlinesMesh.position.z = 0.02;
+    this.group.add(this.scanlinesMesh);
+  }
+
+  /**
+   * Create floating particle effect
+   */
+  private createParticleEffect(): void {
+    const particleCount = 100;
+    const geometry = new THREE.BufferGeometry();
+    
+    const positions = new Float32Array(particleCount * 3);
+    const velocities = new Float32Array(particleCount * 3);
+    const sizes = new Float32Array(particleCount);
+    const lifetimes = new Float32Array(particleCount);
+    
+    for (let i = 0; i < particleCount; i++) {
+      const i3 = i * 3;
+      
+      // Random positions around billboard
+      positions[i3] = (Math.random() - 0.5) * this.config.width * 1.5;
+      positions[i3 + 1] = (Math.random() - 0.5) * this.config.height * 1.5;
+      positions[i3 + 2] = (Math.random() - 0.5) * 2;
+      
+      // Random velocities
+      velocities[i3] = (Math.random() - 0.5) * 0.02;
+      velocities[i3 + 1] = Math.random() * 0.02 + 0.01;
+      velocities[i3 + 2] = (Math.random() - 0.5) * 0.01;
+      
+      sizes[i] = Math.random() * 0.3 + 0.1;
+      lifetimes[i] = Math.random();
+    }
+    
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    geometry.setAttribute('lifetime', new THREE.BufferAttribute(lifetimes, 1));
+    
+    const particleMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0 },
+        color: { value: new THREE.Color(this.config.colors.glow || this.config.colors.primary) },
+        opacity: { value: 0.6 }
+      },
+      vertexShader: `
+        attribute vec3 velocity;
+        attribute float size;
+        attribute float lifetime;
+        uniform float time;
+        varying float vLifetime;
+        varying float vSize;
+        
+        void main() {
+          vLifetime = mod(lifetime + time * 0.1, 1.0);
+          vSize = size;
+          
+          vec3 pos = position + velocity * vLifetime * 10.0;
+          pos.y = mod(pos.y + 20.0, 40.0) - 20.0;
+          
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = size * 100.0 / -mvPosition.z;
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 color;
+        uniform float opacity;
+        varying float vLifetime;
+        varying float vSize;
+        
+        void main() {
+          float dist = distance(gl_PointCoord, vec2(0.5));
+          if (dist > 0.5) discard;
+          
+          float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
+          alpha *= opacity * (1.0 - vLifetime);
+          
+          vec3 finalColor = color * (1.0 + vSize);
+          gl_FragColor = vec4(finalColor, alpha);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    
+    this.particleSystem = new THREE.Points(geometry, particleMaterial);
+    this.group.add(this.particleSystem);
+  }
+
+  /**
    * Add decorative elements to make it look professional
    */
   private addDecorativeElements(): void {
@@ -371,10 +706,37 @@ export class Billboard3D {
    */
   public update(deltaTime: number): void {
     this.animationTime += deltaTime;
+    this.glitchTime += deltaTime;
     
     // Update glow animation
     if (this.glowMesh && this.glowMesh.material instanceof THREE.ShaderMaterial) {
       this.glowMesh.material.uniforms.time.value = this.animationTime;
+    }
+    
+    // Update hologram effect
+    if (this.hologramMesh && this.hologramMesh.material instanceof THREE.ShaderMaterial) {
+      this.hologramMesh.material.uniforms.time.value = this.animationTime;
+      
+      // Occasional glitch effect
+      if (this.config.glitchIntensity && Math.random() < this.config.glitchIntensity * deltaTime) {
+        this.hologramMesh.material.uniforms.opacity.value = 0.3 + Math.random() * 0.2;
+        setTimeout(() => {
+          if (this.hologramMesh && this.hologramMesh.material instanceof THREE.ShaderMaterial) {
+            this.hologramMesh.material.uniforms.opacity.value = 0.15;
+          }
+        }, 50 + Math.random() * 100);
+      }
+    }
+    
+    // Update scanlines
+    if (this.scanlinesMesh && this.scanlinesMesh.material instanceof THREE.ShaderMaterial) {
+      this.scanlinesMesh.material.uniforms.time.value = this.animationTime;
+    }
+    
+    // Update particles
+    if (this.particleSystem && this.particleSystem.material instanceof THREE.ShaderMaterial) {
+      this.particleSystem.material.uniforms.time.value = this.animationTime;
+      this.particleSystem.rotation.y = this.animationTime * 0.05;
     }
     
     // Fetch new data every 30 seconds
@@ -407,6 +769,32 @@ export class Billboard3D {
       if (this.glowMesh.material instanceof THREE.ShaderMaterial) {
         this.glowMesh.material.dispose();
       }
+    }
+    
+    if (this.hologramMesh) {
+      this.hologramMesh.geometry.dispose();
+      if (this.hologramMesh.material instanceof THREE.ShaderMaterial) {
+        this.hologramMesh.material.dispose();
+      }
+    }
+    
+    if (this.scanlinesMesh) {
+      this.scanlinesMesh.geometry.dispose();
+      if (this.scanlinesMesh.material instanceof THREE.ShaderMaterial) {
+        this.scanlinesMesh.material.dispose();
+      }
+    }
+    
+    if (this.particleSystem) {
+      this.particleSystem.geometry.dispose();
+      if (this.particleSystem.material instanceof THREE.ShaderMaterial) {
+        this.particleSystem.material.dispose();
+      }
+    }
+    
+    if (this.frameMesh) {
+      // Dispose frame group
+      this.group.remove(this.frameMesh);
     }
     
     // Clean up canvas and context references

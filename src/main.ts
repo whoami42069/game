@@ -44,11 +44,8 @@ class NexusEternal {
         uiManager: this.uiManager
       });
       
-      // Start the game
+      // Start the game (Game.ts handles loading screen now)
       await this.game.start();
-      
-      // Hide loading screen
-      this.hideLoadingScreen();
       
       console.log('✅ Nexus Eternal initialized successfully');
       

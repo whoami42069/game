@@ -458,6 +458,19 @@ export class TextureManager {
     metalness: THREE.CanvasTexture;
     ao: THREE.CanvasTexture;
   } {
+    const key = `metallic_panel_${size}_${metalness}`;
+    
+    // Check cache first
+    if (this.textureCache.has(`${key}_diffuse`)) {
+      return {
+        diffuse: this.textureCache.get(`${key}_diffuse`) as THREE.CanvasTexture,
+        normal: this.textureCache.get(`${key}_normal`) as THREE.CanvasTexture,
+        roughness: this.textureCache.get(`${key}_roughness`) as THREE.CanvasTexture,
+        metalness: this.textureCache.get(`${key}_metalness`) as THREE.CanvasTexture,
+        ao: this.textureCache.get(`${key}_ao`) as THREE.CanvasTexture
+      };
+    }
+    
     // Create diffuse texture with panel details
     const diffuseCanvas = this.createMetallicPanelDiffuse(size);
     const diffuseTexture = new THREE.CanvasTexture(diffuseCanvas);
@@ -505,6 +518,13 @@ export class TextureManager {
     // Create ambient occlusion map
     const aoCanvas = this.createMetallicPanelAO(size);
     const aoTexture = new THREE.CanvasTexture(aoCanvas);
+    
+    // Cache the textures
+    this.textureCache.set(`${key}_diffuse`, diffuseTexture);
+    this.textureCache.set(`${key}_normal`, normalTexture);
+    this.textureCache.set(`${key}_roughness`, roughnessTexture);
+    this.textureCache.set(`${key}_metalness`, metalnessTexture);
+    this.textureCache.set(`${key}_ao`, aoTexture);
     
     return {
       diffuse: diffuseTexture,

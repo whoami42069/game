@@ -10,7 +10,6 @@ export class Minion {
     private projectileSpeed: number = 7; // Reduced from 10 for slower bullets
     private spawnTime: number;
     private spawnProtectionDuration: number = 2000; // 2 seconds spawn protection
-    private projectiles: THREE.Mesh[] = [];
     private dropChance: number = 0.05; // 5% drop chance
     private bodyMaterial!: THREE.MeshPhysicalMaterial;
     private position: THREE.Vector3;
@@ -74,7 +73,7 @@ export class Minion {
         }
         
         this.mesh.position.copy(this.position);
-        this.mesh.position.y = 1; // Match player height
+        this.mesh.position.y = this.position.y; // Use the position's Y value
         
         // Spawn animation
         this.mesh.scale.set(0, 0, 0);
@@ -139,14 +138,14 @@ export class Minion {
         this.mesh.add(this.particleSystem);
     }
 
-    public update(playerPosition: THREE.Vector3, deltaTime: number): void {
-        if (this.isDead) return;
+    public update(playerPosition: THREE.Vector3, deltaTime: number): THREE.Mesh[] | null {
+        if (this.isDead) return null;
         
         const currentTime = Date.now();
         const canShoot = currentTime - this.spawnTime > this.spawnProtectionDuration;
         
-        // Floating animation
-        this.mesh.position.y = 1 + Math.sin(currentTime * 0.002) * 0.2;
+        // Keep minion at player height with small floating animation
+        this.mesh.position.y = this.position.y + Math.sin(currentTime * 0.002) * 0.2;
         this.mesh.rotation.y += 0.01;
         
         // Animate rings
@@ -169,13 +168,11 @@ export class Minion {
         }
         
         // Shoot at player if spawn protection is over
+        let projectiles: THREE.Mesh[] | null = null;
         if (canShoot && currentTime - this.lastFireTime > this.fireRate) {
-            this.shoot(playerPosition);
+            projectiles = this.shoot(playerPosition);
             this.lastFireTime = currentTime;
         }
-        
-        // Update projectiles
-        this.updateProjectiles(deltaTime);
         
         // Visual indication of spawn protection
         if (!canShoot) {
@@ -184,35 +181,41 @@ export class Minion {
         } else {
             this.bodyMaterial.emissiveIntensity = 2;
         }
+        
+        return projectiles;
     }
 
-    private shoot(targetPosition: THREE.Vector3): void {
+    private shoot(targetPosition: THREE.Vector3): THREE.Mesh[] {
+        const projectiles: THREE.Mesh[] = [];
+        
         // Create neon purple projectile
-        const projectileGeometry = new THREE.SphereGeometry(0.15, 8, 8);
+        const projectileGeometry = new THREE.SphereGeometry(0.3, 8, 8);
         const projectileMaterial = new THREE.MeshBasicMaterial({
-            color: new THREE.Color(1, 0, 1) // Neon purple
+            color: 0xff00ff,
+            transparent: true,
+            opacity: 0.9
         });
         
         const projectile = new THREE.Mesh(projectileGeometry, projectileMaterial);
         projectile.position.copy(this.mesh.position);
-        projectile.position.y += 0.5;
-        
-        // REMOVED: PointLight causes memory leak
-        // Glow effect handled by emissive material
+        projectile.position.y = this.mesh.position.y;
         
         // Calculate direction
         const direction = targetPosition.clone().sub(projectile.position).normalize();
         
-        // Store projectile data
-        (projectile as any).velocity = direction.multiplyScalar(this.projectileSpeed);
-        (projectile as any).lifetime = 5000; // 5 seconds lifetime
-        (projectile as any).startTime = Date.now();
+        // Store projectile data - matching game's projectile system
+        projectile.userData = {
+            velocity: direction.multiplyScalar(this.projectileSpeed),
+            damage: 5,
+            owner: 'minion'
+        };
         
-        this.projectiles.push(projectile);
-        this.scene.add(projectile);
+        projectiles.push(projectile);
         
         // Create muzzle flash
         this.createMuzzleFlash(projectile.position);
+        
+        return projectiles;
     }
 
     private createMuzzleFlash(position: THREE.Vector3): void {
@@ -250,25 +253,7 @@ export class Minion {
         animate();
     }
 
-    private updateProjectiles(deltaTime: number): void {
-        const currentTime = Date.now();
-        
-        for (let i = this.projectiles.length - 1; i >= 0; i--) {
-            const projectile = this.projectiles[i] as any;
-            
-            // Update position
-            const velocity = projectile.velocity as THREE.Vector3;
-            projectile.position.add(velocity.clone().multiplyScalar(deltaTime / 1000));
-            
-            // Check lifetime
-            if (currentTime - projectile.startTime > projectile.lifetime) {
-                this.scene.remove(projectile);
-                projectile.geometry.dispose();
-                projectile.material.dispose();
-                this.projectiles.splice(i, 1);
-            }
-        }
-    }
+    // Removed updateProjectiles - projectiles now handled by Game.ts
 
     public takeDamage(damage: number): boolean {
         if (this.isDead) return false;
@@ -308,13 +293,7 @@ export class Minion {
             this.dropItem();
         }
         
-        // Clean up projectiles
-        this.projectiles.forEach((projectile: any) => {
-            this.scene.remove(projectile);
-            projectile.geometry.dispose();
-            projectile.material.dispose();
-        });
-        this.projectiles = [];
+        // Projectiles now handled by Game.ts
         
         // Death animation then dispose
         const startTime = Date.now();
@@ -341,7 +320,7 @@ export class Minion {
 
     private createDeathExplosion(): void {
         // Create explosion particles
-        const particleCount = 50;
+        const particleCount = 30;
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(particleCount * 3);
         const velocities = new Float32Array(particleCount * 3);
@@ -380,9 +359,14 @@ export class Minion {
         explosion.position.copy(this.mesh.position);
         this.scene.add(explosion);
         
-        // Animate explosion
+        // Store reference for cleanup
+        (window as any).__minionExplosions = (window as any).__minionExplosions || [];
+        (window as any).__minionExplosions.push(explosion);
+        
+        // Animate explosion and ensure cleanup
         const startTime = Date.now();
-        const duration = 1000;
+        const duration = 600; // Shorter duration
+        let animId: number;
         
         const animate = () => {
             const elapsed = Date.now() - startTime;
@@ -405,14 +389,23 @@ export class Minion {
             material.opacity = 1 - progress;
             
             if (progress < 1) {
-                const animId = requestAnimationFrame(animate);
+                animId = requestAnimationFrame(animate);
                 this.activeAnimations.add(animId);
             } else {
-                this.scene.remove(explosion);
+                // Ensure cleanup
+                if (this.scene.children.includes(explosion)) {
+                    this.scene.remove(explosion);
+                }
                 geometry.dispose();
                 material.dispose();
-                // Clear all tracked animations
-                this.activeAnimations.clear();
+                if (animId) this.activeAnimations.delete(animId);
+                
+                // Remove from global tracking
+                const explosions = (window as any).__minionExplosions;
+                if (explosions) {
+                    const index = explosions.indexOf(explosion);
+                    if (index > -1) explosions.splice(index, 1);
+                }
             }
         };
         animate();
@@ -433,24 +426,7 @@ export class Minion {
         });
     }
 
-    public checkProjectileCollision(targetMesh: THREE.Mesh): boolean {
-        for (let i = this.projectiles.length - 1; i >= 0; i--) {
-            const projectile = this.projectiles[i];
-            
-            // Simple distance-based collision
-            const distance = projectile.position.distanceTo(targetMesh.position);
-            if (distance < 1.5) {
-                // Remove projectile
-                this.scene.remove(projectile);
-                projectile.geometry.dispose();
-                (projectile.material as THREE.Material).dispose();
-                this.projectiles.splice(i, 1);
-                
-                return true; // Hit detected
-            }
-        }
-        return false;
-    }
+    // Removed checkProjectileCollision - projectiles now handled by Game.ts
 
     public dispose(): void {
         // Cancel all running animations
@@ -481,15 +457,6 @@ export class Minion {
             this.particleSystem.geometry.dispose();
             (this.particleSystem.material as THREE.Material).dispose();
         }
-        
-        // Clean up any remaining projectiles
-        this.projectiles.forEach((projectile: any) => {
-            if (this.scene.children.includes(projectile)) {
-                this.scene.remove(projectile);
-            }
-            projectile.geometry.dispose();
-            projectile.material.dispose();
-        });
     }
 
     public getPosition(): THREE.Vector3 {
