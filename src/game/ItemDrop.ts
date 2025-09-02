@@ -42,8 +42,8 @@ export class ItemDrop {
     const containerGeometry = new THREE.OctahedronGeometry(0.5, 0);
     const containerMaterial = new THREE.MeshBasicMaterial({
       color: this.itemData.color,
-      emissive: this.itemData.color,
-      emissiveIntensity: 0.8, // Increased to compensate for removed light
+      // emissive: this.itemData.color, // Not supported on MeshBasicMaterial
+      // emissiveIntensity: 0.8, // Not supported on MeshBasicMaterial
       transparent: true,
       opacity: 0.9
     });

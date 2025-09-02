@@ -659,7 +659,7 @@ export class SpaceArena {
       });
       
       // Animate only first 2 debris
-      this.debris.slice(0, 2).forEach((debris, i) => {
+      this.debris.slice(0, 2).forEach((debris) => {
         debris.rotation.x += 0.04;
         debris.rotation.y += 0.06;
       });

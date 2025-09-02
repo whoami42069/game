@@ -63,7 +63,6 @@ export class Game {
   private gameState: GameState = GameState.MENU;
   
   // Static reusable objects to prevent allocation in loops
-  private static tempVector3 = new THREE.Vector3();
   private static tempColor = new THREE.Color();
   private static tempVelocity = new THREE.Vector3();
   private static tempAcceleration = new THREE.Vector3();
@@ -74,7 +73,7 @@ export class Game {
   private boss: SimpleBoss | null = null;
   private minions: Minion[] = [];
   private lastMinionSpawnTime: number = 0;
-  private minionSpawnInterval: number = 20000; // 20 seconds
+  // private minionSpawnInterval: number = 15000; // 15 seconds initially, 8 seconds after level 5
   private projectiles: THREE.Mesh[] = [];
   private readonly MAX_PROJECTILES = 100; // Hard limit to prevent memory issues
   private readonly MAX_PROJECTILES_PER_OWNER = 40; // Per owner limit
@@ -89,6 +88,7 @@ export class Game {
   private bossLevel: number = 1;
   private comboMultiplier: number = 1;
   private lastHitTime: number = 0;
+  private comboTimeoutId: number | null = null;
 
   // Memory management for cleanup
   private timers: Set<number> = new Set();
@@ -135,11 +135,7 @@ export class Game {
     },
     getStats: () => ({})
   };
-  private performanceManager: any = {
-    optimizer: {
-      getOptimizationLevels: () => ({})
-    }
-  };
+  // Performance manager removed - unused
 
   constructor(config: GameConfig) {
     this.canvas = config.canvas;
@@ -1090,9 +1086,11 @@ export class Game {
         }
       }
 
-      // Spawn minions every 20 seconds
+      // Spawn minions every 15 seconds (8 seconds after level 5)
       const currentTime = Date.now();
-      if (currentTime - this.lastMinionSpawnTime >= this.minionSpawnInterval) {
+      // Adjust spawn interval based on boss level
+      const spawnInterval = this.bossLevel >= 5 ? 8000 : 15000;
+      if (currentTime - this.lastMinionSpawnTime >= spawnInterval) {
         this.spawnMinion();
         this.lastMinionSpawnTime = currentTime;
       }
@@ -1294,7 +1292,7 @@ export class Game {
                 if (minion.takeDamage(1)) {
                   // Apply combo system for minion kills too
                   const now = Date.now();
-                  if (now - this.lastHitTime <= 1000) {
+                  if (now - this.lastHitTime <= 1200) {
                     this.comboMultiplier = Math.min(5, this.comboMultiplier + 1);
                   } else {
                     this.comboMultiplier = 1;
@@ -1302,6 +1300,21 @@ export class Game {
                   const points = 10 * this.comboMultiplier;
                   this.score += points;
                   this.lastHitTime = now;
+                  
+                  // Clear existing combo timeout
+                  if (this.comboTimeoutId !== null) {
+                    clearTimeout(this.comboTimeoutId);
+                  }
+                  
+                  // Set new timeout to reset combo after 1.2 seconds
+                  this.comboTimeoutId = window.setTimeout(() => {
+                    this.comboMultiplier = 1;
+                    if (this.gameUI) {
+                      this.gameUI.updateCombo(this.comboMultiplier);
+                    }
+                    this.comboTimeoutId = null;
+                  }, 1200);
+                  
                   if (this.gameUI) {
                     this.gameUI.showNotification(`+${points}`, '#ffff00', 500);
                     this.gameUI.updateCombo(this.comboMultiplier);
@@ -1337,11 +1350,11 @@ export class Game {
 
       // Update combo multiplier
       const now = Date.now();
-      if (now - this.lastHitTime <= 1000) {
-        // Within 1 second - increase multiplier up to x5
+      if (now - this.lastHitTime <= 1200) {
+        // Within 1.2 seconds - increase multiplier up to x5
         this.comboMultiplier = Math.min(5, this.comboMultiplier + 1);
       } else {
-        // Reset multiplier if more than 1 second has passed
+        // Reset multiplier if more than 1.2 seconds has passed
         this.comboMultiplier = 1;
       }
 
@@ -1349,6 +1362,20 @@ export class Game {
       const points = 10 * this.comboMultiplier;
       this.score += points;
       this.lastHitTime = now;
+
+      // Clear existing combo timeout
+      if (this.comboTimeoutId !== null) {
+        clearTimeout(this.comboTimeoutId);
+      }
+
+      // Set new timeout to reset combo after 1.2 seconds
+      this.comboTimeoutId = window.setTimeout(() => {
+        this.comboMultiplier = 1;
+        if (this.gameUI) {
+          this.gameUI.updateCombo(this.comboMultiplier);
+        }
+        this.comboTimeoutId = null;
+      }, 1200);
 
       // INSTANT COMBAT FEEDBACK - No delays!
       if (this.combatFeedbackManager) {
@@ -1402,6 +1429,8 @@ export class Game {
     }
   }
 
+  // Removed unused handleBossHit method
+  /*
   private handleBossHit(damage: number, hitPosition: THREE.Vector3): void {
     try {
       this.player?.takeDamage(damage);
@@ -1422,6 +1451,7 @@ export class Game {
       console.error('Error processing boss hit:', error);
     }
   }
+  */
 
   private showLevelAnnouncement(level: number): void {
     if (!this.announcementDiv) return;

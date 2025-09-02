@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ProjectilePoolManager, PooledProjectile, ProjectileData } from './ProjectilePoolManager';
+import { ProjectilePoolManager, PooledProjectile } from './ProjectilePoolManager';
 import { OptimizedCollisionSystem, CollisionTarget, CollisionResult } from './OptimizedCollisionSystem';
 import { ProjectileEffectsSystem } from './ProjectileEffectsSystem';
 
@@ -11,7 +11,7 @@ import { ProjectileEffectsSystem } from './ProjectileEffectsSystem';
  * - Strict limits to prevent performance degradation
  */
 export class ProjectileManager {
-  private scene: THREE.Scene;
+  // private scene: THREE.Scene;
   private poolManager: ProjectilePoolManager;
   private collisionSystem: OptimizedCollisionSystem;
   private effectsSystem: ProjectileEffectsSystem;
@@ -25,8 +25,8 @@ export class ProjectileManager {
   };
   
   // Batch processing for performance
-  private readonly UPDATE_BATCH_SIZE = 25;
-  private readonly COLLISION_BATCH_SIZE = 20;
+  // private readonly UPDATE_BATCH_SIZE = 25;
+  // private readonly COLLISION_BATCH_SIZE = 20;
   
   // Performance monitoring
   private frameStats = {
@@ -40,7 +40,7 @@ export class ProjectileManager {
   private arenaBounds: { radius: number } | { min: THREE.Vector3, max: THREE.Vector3 } | null = null;
 
   constructor(scene: THREE.Scene) {
-    this.scene = scene;
+    // this.scene = scene;
     this.poolManager = new ProjectilePoolManager(scene);
     this.collisionSystem = new OptimizedCollisionSystem();
     this.effectsSystem = new ProjectileEffectsSystem(scene);
@@ -194,7 +194,7 @@ export class ProjectileManager {
     const collisionResults = this.collisionSystem.checkCollisions(activeProjectiles);
     
     // Process collision results
-    const { destroyedTargets, hitProjectiles } = this.collisionSystem.processCollisionResults(collisionResults);
+    const { hitProjectiles } = this.collisionSystem.processCollisionResults(collisionResults);
     
     // Remove hit projectiles
     for (const projectile of hitProjectiles) {

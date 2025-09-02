@@ -107,7 +107,7 @@ export class ProjectileEffectsSystem {
     this.scene.add(this.globalProjectileLight);
   }
 
-  public createMuzzleFlash(position: THREE.Vector3, direction: THREE.Vector3, color: THREE.Color = new THREE.Color(0x00ffff), intensity: number = 1.0): void {
+  public createMuzzleFlash(position: THREE.Vector3, _direction: THREE.Vector3, color: THREE.Color = new THREE.Color(0x00ffff), intensity: number = 1.0): void {
     if (this.muzzleFlashes.length >= this.MAX_EFFECTS_PER_TYPE) {
       this.muzzleFlashes.shift(); // Remove oldest
     }
@@ -158,7 +158,7 @@ export class ProjectileEffectsSystem {
     });
   }
 
-  public update(deltaTime: number, camera: THREE.Camera, projectilePositions?: THREE.Vector3[]): void {
+  public update(_deltaTime: number, camera: THREE.Camera, projectilePositions?: THREE.Vector3[]): void {
     const currentTime = performance.now();
     
     // Update muzzle flashes
@@ -190,7 +190,7 @@ export class ProjectileEffectsSystem {
       // Calculate animation values
       const progress = age / flash.data.lifetime;
       const scale = flash.data.scale * (1 - progress * 0.5); // Slight shrink
-      const opacity = flash.data.intensity * (1 - progress); // Fade out
+       // Fade out
       
       // Billboard to camera
       const direction = new THREE.Vector3()
@@ -221,7 +221,7 @@ export class ProjectileEffectsSystem {
     }
   }
 
-  private updateProjectileGlows(currentTime: number, camera: THREE.Camera): void {
+  private updateProjectileGlows(currentTime: number, _camera: THREE.Camera): void {
     const activeGlows: typeof this.projectileGlows = [];
     let instanceIndex = 0;
 
@@ -234,7 +234,7 @@ export class ProjectileEffectsSystem {
       // Calculate animation values
       const progress = age / glow.data.lifetime;
       const scale = glow.data.scale * (1 + Math.sin(progress * Math.PI * 4) * 0.2); // Pulse effect
-      const opacity = glow.data.intensity * (1 - progress * 0.3); // Gentle fade
+       // Gentle fade
       
       // Billboard to camera (simplified)
       const rotation = new THREE.Euler();
@@ -257,7 +257,7 @@ export class ProjectileEffectsSystem {
     }
   }
 
-  private updateImpactEffects(currentTime: number, camera: THREE.Camera): void {
+  private updateImpactEffects(currentTime: number, _camera: THREE.Camera): void {
     const activeImpacts: typeof this.impactEffects = [];
     let instanceIndex = 0;
 
@@ -270,7 +270,7 @@ export class ProjectileEffectsSystem {
       // Calculate animation values
       const progress = age / impact.data.lifetime;
       const scale = impact.data.scale + progress * 3; // Rapid expansion
-      const opacity = impact.data.intensity * (1 - progress * progress); // Quadratic fade
+       // Quadratic fade
       
       // Billboard to camera
       const rotation = new THREE.Euler();

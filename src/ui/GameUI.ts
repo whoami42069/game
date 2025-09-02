@@ -438,6 +438,7 @@ export class GameUI {
       z-index: 2;
     `;
     bossText.textContent = 'NEXUS CORE';
+    bossText.id = 'boss-name-text';  // Add ID for easy updates
     
     bossContainer.appendChild(this.bossHealthBar);
     bossContainer.appendChild(bossText);
@@ -666,6 +667,12 @@ export class GameUI {
     this.bossHealthBar.parentElement!.style.display = 'block';
     const healthPercent = (boss.health / boss.maxHealth) * 100;
     this.bossHealthBar.style.width = `${healthPercent}%`;
+    
+    // Update boss name with level
+    const bossNameText = document.getElementById('boss-name-text');
+    if (bossNameText) {
+      bossNameText.textContent = `NEXUS CORE L${boss.level}`;
+    }
   }
 
   public updateScore(score: number): void {
@@ -685,8 +692,18 @@ export class GameUI {
         this.comboElement.style.transform = 'scale(1)';
       }, 100);
     } else {
-      this.comboElement.textContent = '';
-      this.comboElement.style.opacity = '0';
+      // Show x1 briefly when combo resets
+      this.comboElement.textContent = 'COMBO x1';
+      this.comboElement.style.opacity = '0.5';
+      this.comboElement.style.transform = 'scale(0.9)';
+      
+      // Fade out after a short delay
+      setTimeout(() => {
+        this.comboElement.style.opacity = '0';
+        setTimeout(() => {
+          this.comboElement.textContent = '';
+        }, 200);
+      }, 300);
     }
   }
 

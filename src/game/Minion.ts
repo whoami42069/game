@@ -5,7 +5,7 @@ export class Minion {
     private scene: THREE.Scene;
     private health: number = 1;
     private isDead: boolean = false;
-    private fireRate: number = 2000 / 3; // 3 fires every 2 seconds (666ms between shots)
+    private fireRate: number = 4000; // Fire every 4 seconds
     private lastFireTime: number = 0;
     private projectileSpeed: number = 7; // Reduced from 10 for slower bullets
     private spawnTime: number;

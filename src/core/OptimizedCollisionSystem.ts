@@ -18,7 +18,7 @@ export interface CollisionResult {
 
 export class OptimizedCollisionSystem {
   private collisionTargets: Map<string, CollisionTarget[]> = new Map();
-  private readonly COLLISION_GRID_SIZE = 10;
+  // private readonly COLLISION_GRID_SIZE = 10;
   
   // Collision batching for performance
   private collisionBatch: CollisionResult[] = [];
@@ -159,11 +159,11 @@ export class OptimizedCollisionSystem {
   }
 
   // Spatial optimization helpers
-  private getGridKey(position: THREE.Vector3): string {
-    const x = Math.floor(position.x / this.COLLISION_GRID_SIZE);
-    const z = Math.floor(position.z / this.COLLISION_GRID_SIZE);
-    return `${x},${z}`;
-  }
+  // private getGridKey(position: THREE.Vector3): string {
+  //   const x = Math.floor(position.x / this.COLLISION_GRID_SIZE);
+  //   const z = Math.floor(position.z / this.COLLISION_GRID_SIZE);
+  //   return `${x},${z}`;
+  // }
 
   public getTargetsInRadius(center: THREE.Vector3, radius: number, excludeOwner?: string): CollisionTarget[] {
     const result: CollisionTarget[] = [];

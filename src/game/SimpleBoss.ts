@@ -34,14 +34,14 @@ export class SimpleBoss {
   
   // Particle pool for damage effects
   private particlePool: { mesh: THREE.Mesh, geometry: THREE.BufferGeometry, material: THREE.Material }[] = [];
-  private activeParticles: Set<{ mesh: THREE.Mesh, velocity: THREE.Vector3, geometry: THREE.BufferGeometry, material: THREE.Material }> = new Set();
+  // Removed unused activeParticles set
   
   // Cached mesh references to avoid traversal
   private phaserMeshes: THREE.Mesh[] = [];
   private deflectorMesh: THREE.Mesh | null = null;
   private engineMeshes: THREE.Mesh[] = [];
-  private bridgeMesh: THREE.Mesh | null = null;
-  private warpNacelleMeshes: THREE.Mesh[] = [];
+  // private bridgeMesh: THREE.Mesh | null = null;
+  // Removed unused warpNacelleMeshes
   
   // Static texture cache to prevent regeneration during evolve
   public static cachedHullTextures: any = null;
@@ -54,7 +54,7 @@ export class SimpleBoss {
   
   // Static geometry pool to prevent geometry recreation
   private static torpedoGeometry: THREE.SphereGeometry | null = null;
-  private static beamGeometry: THREE.CylinderGeometry | null = null;
+  // private static beamGeometry: THREE.CylinderGeometry | null = null;
 
   constructor(scene: THREE.Scene, level: number = 1) {
     this.scene = scene;
@@ -354,7 +354,7 @@ export class SimpleBoss {
     const bridge = new THREE.Mesh(bridgeGeometry, bridgeMaterial);
     bridge.position.set(0, 0.6, 1.5);
     this.mesh.add(bridge);
-    this.bridgeMesh = bridge; // Cache reference
+    // this.bridgeMesh = bridge; // Cache reference
     
     // Bridge viewport
     const viewportGeometry = new THREE.BoxGeometry(0.5, 0.06, 0.25);
@@ -793,81 +793,83 @@ export class SimpleBoss {
     return projectiles;
   }
 
-  private createPhaserEffect(): void {
-    // Cancel previous attack animation if still running
-    if (this.attackAnimationId !== null) {
-      cancelAnimationFrame(this.attackAnimationId);
-      this.attackAnimationId = null;
-    }
-    
-    // Clean up any existing beam/flash that wasn't properly disposed
-    if (this.currentBeam) {
-      this.scene.remove(this.currentBeam);
-      if (this.currentBeam.geometry) this.currentBeam.geometry.dispose();
-      if (this.currentBeam.material instanceof THREE.Material) {
-        this.currentBeam.material.dispose();
-      }
-      this.currentBeam = null;
-    }
-    if (this.currentFlash) {
-      this.scene.remove(this.currentFlash);
-      this.currentFlash = null;
-    }
-    
-    // Use pooled geometry to avoid creating new geometry every shot
-    if (!SimpleBoss.beamGeometry) {
-      SimpleBoss.beamGeometry = new THREE.CylinderGeometry(0.08, 0.04, 8, 6);
-    }
-    // Clone the pooled material so we can modify it without affecting the pool
-    const beamMaterial = SimpleBoss.beamMaterial!.clone();
-    
-    const beam = new THREE.Mesh(SimpleBoss.beamGeometry, beamMaterial);
-    const direction = this.target.clone().sub(this.mesh.position);
-    const distance = direction.length();
-    
-    beam.position.copy(this.mesh.position);
-    beam.position.y += 0.45; // From phaser array position
-    beam.scale.y = distance / 8;
-    beam.lookAt(this.target);
-    beam.rotateX(Math.PI / 2);
-    
-    this.scene.add(beam);
-    this.currentBeam = beam; // Track reference
-    
-    // Flash effect
-    const flash = new THREE.PointLight(0xff8800, 8, 20);
-    flash.position.copy(beam.position);
-    this.scene.add(flash);
-    this.currentFlash = flash; // Track reference
-    
-    // Animate and remove
-    const startTime = Date.now();
-    const animate = () => {
-      const elapsed = (Date.now() - startTime) / 1000;
-      if (elapsed < 0.25) {
-        beamMaterial.opacity = 0.9 * (1 - elapsed * 4);
-        beamMaterial.emissiveIntensity = 4.0 * (1 - elapsed * 3);
-        flash.intensity = 8 * (1 - elapsed * 4);
-        beam.scale.x = 1 + elapsed * 1.5;
-        beam.scale.z = 1 + elapsed * 1.5;
-        this.attackAnimationId = requestAnimationFrame(animate);
-      } else {
-        // Properly clean up the beam
-        if (this.currentBeam === beam) {
-          this.scene.remove(beam);
-          // Don't dispose the pooled geometry!
-          beamMaterial.dispose(); // Only dispose the cloned material
-          this.currentBeam = null;
-        }
-        if (this.currentFlash === flash) {
-          this.scene.remove(flash);
-          this.currentFlash = null;
-        }
-        this.attackAnimationId = null;
-      }
-    };
-    animate();
-  }
+  // Disabled phaser effect method to prevent performance issues
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // private createPhaserEffect(): void {
+  //   // Cancel previous attack animation if still running
+  //   if (this.attackAnimationId !== null) {
+  //     cancelAnimationFrame(this.attackAnimationId);
+  //     this.attackAnimationId = null;
+  //   }
+  //   
+  //   // Clean up any existing beam/flash that wasn't properly disposed
+  //   if (this.currentBeam) {
+  //     this.scene.remove(this.currentBeam);
+  //     if (this.currentBeam.geometry) this.currentBeam.geometry.dispose();
+  //     if (this.currentBeam.material instanceof THREE.Material) {
+  //       this.currentBeam.material.dispose();
+  //     }
+  //     this.currentBeam = null;
+  //   }
+  //   if (this.currentFlash) {
+  //     this.scene.remove(this.currentFlash);
+  //     this.currentFlash = null;
+  //   }
+  //   
+  //   // Use pooled geometry to avoid creating new geometry every shot
+  //   if (!SimpleBoss.beamGeometry) {
+  //     SimpleBoss.beamGeometry = new THREE.CylinderGeometry(0.08, 0.04, 8, 6);
+  //   }
+  //   // Clone the pooled material so we can modify it without affecting the pool
+  //   const beamMaterial = SimpleBoss.beamMaterial!.clone();
+  //   
+  //   const beam = new THREE.Mesh(SimpleBoss.beamGeometry, beamMaterial);
+  //   const direction = this.target.clone().sub(this.mesh.position);
+  //   const distance = direction.length();
+  //   
+  //   beam.position.copy(this.mesh.position);
+  //   beam.position.y += 0.45; // From phaser array position
+  //   beam.scale.y = distance / 8;
+  //   beam.lookAt(this.target);
+  //   beam.rotateX(Math.PI / 2);
+  //   
+  //   this.scene.add(beam);
+  //   this.currentBeam = beam; // Track reference
+  //   
+  //   // Flash effect
+  //   const flash = new THREE.PointLight(0xff8800, 8, 20);
+  //   flash.position.copy(beam.position);
+  //   this.scene.add(flash);
+  //   this.currentFlash = flash; // Track reference
+  //   
+  //   // Animate and remove
+  //   const startTime = Date.now();
+  //   const animate = () => {
+  //     const elapsed = (Date.now() - startTime) / 1000;
+  //     if (elapsed < 0.25) {
+  //       beamMaterial.opacity = 0.9 * (1 - elapsed * 4);
+  //       beamMaterial.emissiveIntensity = 4.0 * (1 - elapsed * 3);
+  //       flash.intensity = 8 * (1 - elapsed * 4);
+  //       beam.scale.x = 1 + elapsed * 1.5;
+  //       beam.scale.z = 1 + elapsed * 1.5;
+  //       this.attackAnimationId = requestAnimationFrame(animate);
+  //     } else {
+  //       // Properly clean up the beam
+  //       if (this.currentBeam === beam) {
+  //         this.scene.remove(beam);
+  //         // Don't dispose the pooled geometry!
+  //         beamMaterial.dispose(); // Only dispose the cloned material
+  //         this.currentBeam = null;
+  //       }
+  //       if (this.currentFlash === flash) {
+  //         this.scene.remove(flash);
+  //         this.currentFlash = null;
+  //       }
+  //       this.attackAnimationId = null;
+  //     }
+  //   };
+  //   animate();
+  // }
   
   
   private updateEngineGlows(_deltaTime: number): void {

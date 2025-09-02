@@ -183,10 +183,8 @@ export class GPUParticleSystem {
     }
     
     // Update existing particles
-    let hasActiveParticles = false;
     for (let i = 0; i < this.options.maxParticles; i++) {
       if (this.lifetimes[i] > 0) {
-        hasActiveParticles = true;
         const i3 = i * 3;
         
         // Update lifetime

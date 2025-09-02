@@ -173,8 +173,8 @@ export class ProjectilePoolManager {
           color: 0x00ffff,
           transparent: true,
           opacity: 0.9,
-          emissive: new THREE.Color(0x004466),
-          emissiveIntensity: 0.3
+          // // emissive: new THREE.Color(0x004466), // Not supported on MeshBasicMaterial
+          // emissiveIntensity: 0.3
         });
       });
     }
@@ -192,8 +192,8 @@ export class ProjectilePoolManager {
           color: 0xff6600,
           transparent: true,
           opacity: 0.95,
-          emissive: new THREE.Color(0xff4400),
-          emissiveIntensity: 0.5
+          // emissive: new THREE.Color(0xff4400),
+          // emissiveIntensity: 0.5
         });
       });
     }
@@ -211,8 +211,8 @@ export class ProjectilePoolManager {
           color: 0xff00ff,
           transparent: true,
           opacity: 0.8,
-          emissive: new THREE.Color(0x660033),
-          emissiveIntensity: 0.4
+          // emissive: new THREE.Color(0x660033),
+          // emissiveIntensity: 0.4
         });
       });
     }
@@ -331,7 +331,7 @@ export class ProjectilePoolManager {
     gridCell.push(projectile);
   }
 
-  private updateSpatialGrid(projectile: PooledProjectile): void {
+  private updateSpatialGrid(_projectile: PooledProjectile): void {
     // This could be optimized further by tracking previous position
     // For now, we rely on the periodic cleanup in removeInactive
   }
