@@ -17,6 +17,12 @@ export class GameUI {
   private notificationTimeout: number | null = null;
 
   constructor() {
+    // Remove any existing game UI first
+    const existingUI = document.getElementById('game-ui');
+    if (existingUI) {
+      existingUI.remove();
+    }
+    
     this.injectStyles();
     this.container = document.createElement('div');
     this.container.id = 'game-ui';
@@ -42,7 +48,13 @@ export class GameUI {
   }
 
   private injectStyles(): void {
+    // Check if styles already exist
+    if (document.getElementById('game-ui-styles')) {
+      return;
+    }
+    
     const style = document.createElement('style');
+    style.id = 'game-ui-styles';
     style.textContent = `
       :root {
         --space-cyan: #00d4ff;

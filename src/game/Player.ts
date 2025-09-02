@@ -69,14 +69,22 @@ export class Player {
   private smoothingFactor: number = 0.8; // Higher = more responsive
   
   // Static texture cache to prevent regeneration
-  private static cachedHullTextures: any = null;
-  private static cachedWingTextures: any = null;
-  private static cachedEngineTextures: any = null;
+  public static cachedHullTextures: any = null;
+  public static cachedWingTextures: any = null;
+  public static cachedEngineTextures: any = null;
+  
+  // Static material pool for projectiles to prevent shader recompilation
+  private static projectileMaterial: THREE.MeshBasicMaterial | null = null;
   
   // Static objects for trail updates to prevent allocation
   private static trailMatrix = new THREE.Matrix4();
   private static trailQuaternion = new THREE.Quaternion();
   private static trailScale = new THREE.Vector3();
+  
+  // Static reusable vectors for update loop
+  private static tempForward = new THREE.Vector3();
+  private static tempMoveDirection = new THREE.Vector3();
+  private static tempVelocity = new THREE.Vector3();
   private static trailColor = new THREE.Color();
   
   // Memory management
@@ -100,10 +108,24 @@ export class Player {
       dash: false
     };
 
+    // Initialize material pool to prevent shader recompilation
+    this.initializeMaterialPool();
+    
     this.createModel();
     this.createOptimizedTrail();
     this.createEngineParticles();
     this.setupInput();
+  }
+  
+  private initializeMaterialPool(): void {
+    // Initialize projectile material (single instance for all projectiles)
+    if (!Player.projectileMaterial) {
+      Player.projectileMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00ffff,
+        transparent: true,
+        opacity: 1.0
+      });
+    }
   }
 
   private createModel(): void {
@@ -719,24 +741,23 @@ export class Player {
     // Calculate movement based on character's facing direction
     const moveSpeed = (this.isDashing ? this.DASH_SPEED : this.MOVE_SPEED) * this.speedMultiplier;
     
-    // Get character's forward direction from their rotation
-    const forward = new THREE.Vector3(
+    // Get character's forward direction from their rotation (reuse static vector)
+    Player.tempForward.set(
       Math.sin(this.mesh.rotation.y),
       0,
       Math.cos(this.mesh.rotation.y)
     );
     
-    // W/S move forward/backward in the direction character is facing
-    const moveDirection = new THREE.Vector3();
+    // W/S move forward/backward in the direction character is facing (reuse static vector)
+    Player.tempMoveDirection.set(0, 0, 0);
     if (bufferedInput.forward) {
-      moveDirection.copy(forward);
+      Player.tempMoveDirection.copy(Player.tempForward);
     } else if (bufferedInput.backward) {
-      moveDirection.copy(forward).negate();
+      Player.tempMoveDirection.copy(Player.tempForward).negate();
     }
     
-    if (moveDirection.length() > 0) {
-      // this.lastInputDirection = moveDirection.clone(); // For future use
-      this.velocity = moveDirection.multiplyScalar(moveSpeed);
+    if (Player.tempMoveDirection.length() > 0) {
+      this.velocity.copy(Player.tempMoveDirection).multiplyScalar(moveSpeed);
     } else {
       this.velocity.set(0, 0, 0);
     }
@@ -751,8 +772,9 @@ export class Player {
       this.createDashEffect();
     }
     
-    // Apply velocity
-    this.position.add(this.velocity.clone().multiplyScalar(deltaTime));
+    // Apply velocity (reuse static vector)
+    Player.tempVelocity.copy(this.velocity).multiplyScalar(deltaTime);
+    this.position.add(Player.tempVelocity);
     
     // Keep within circular bounds
     const radius = (bounds as any).radius;
@@ -948,11 +970,8 @@ export class Player {
     offsets.forEach(offset => {
       // Create enhanced projectile with instant feedback
       const geometry = new THREE.ConeGeometry(0.25, 1.0, 8); // Slightly larger and more detailed
-      const material = new THREE.MeshBasicMaterial({
-        color: 0x00ffff,
-        transparent: true,
-        opacity: 1.0 // Full opacity for visibility
-      });
+      // Use pooled material instead of creating new one
+      const material = Player.projectileMaterial!;
       const projectile = new THREE.Mesh(geometry, material);
       
       // Reset projectile properties

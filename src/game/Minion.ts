@@ -7,7 +7,7 @@ export class Minion {
     private isDead: boolean = false;
     private fireRate: number = 2000 / 3; // 3 fires every 2 seconds (666ms between shots)
     private lastFireTime: number = 0;
-    private projectileSpeed: number = 15;
+    private projectileSpeed: number = 7; // Reduced from 10 for slower bullets
     private spawnTime: number;
     private spawnProtectionDuration: number = 2000; // 2 seconds spawn protection
     private projectiles: THREE.Mesh[] = [];

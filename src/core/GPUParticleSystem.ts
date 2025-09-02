@@ -91,6 +91,12 @@ export class GPUParticleSystem {
   }
 
   private createParticleTexture(): THREE.Texture {
+    // Check if we have a cached particle texture from preloading
+    if ((window as any).__cachedParticleTexture) {
+      return (window as any).__cachedParticleTexture;
+    }
+    
+    // Fallback: create texture if not preloaded (shouldn't happen normally)
     const canvas = document.createElement('canvas');
     canvas.width = 64;
     canvas.height = 64;
@@ -110,6 +116,10 @@ export class GPUParticleSystem {
     
     this.texture = new THREE.CanvasTexture(canvas);
     this.texture.needsUpdate = true;
+    
+    // Cache for future use
+    (window as any).__cachedParticleTexture = this.texture;
+    
     return this.texture;
   }
 

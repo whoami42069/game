@@ -61,6 +61,12 @@ export class Game {
   private isRunning: boolean = false;
   private animationId: number | null = null;
   private gameState: GameState = GameState.MENU;
+  
+  // Static reusable objects to prevent allocation in loops
+  private static tempVector3 = new THREE.Vector3();
+  private static tempColor = new THREE.Color();
+  private static tempVelocity = new THREE.Vector3();
+  private static tempAcceleration = new THREE.Vector3();
 
   // Game entities
   private arena: SpaceArena | null = null;
@@ -264,16 +270,123 @@ export class Game {
     // Pre-generate expensive textures during initialization to avoid frame drops
     const textureManager = TextureManager.getInstance();
     
-    // Pre-generate the battle-damaged hull textures that Player uses
-    textureManager.generateBattleDamagedHullTexture(512, 0.4); // Main hull
-    textureManager.generateBattleDamagedHullTexture(256, 0.6); // Wings
-    textureManager.generateBattleDamagedHullTexture(256, 0.8); // Engines
+    // Update loading message
+    const loadingText = document.querySelector('.loading-text');
+    if (loadingText) {
+      loadingText.textContent = 'Generating HD textures...';
+    }
     
-    console.log('🎨 Textures pre-generated');
+    // Pre-generate the battle-damaged hull textures that Player uses
+    // These are cached statically in Player class
+    Player.cachedHullTextures = textureManager.generateBattleDamagedHullTexture(512, 0.4); // Main hull
+    Player.cachedWingTextures = textureManager.generateBattleDamagedHullTexture(256, 0.6); // Wings  
+    Player.cachedEngineTextures = textureManager.generateBattleDamagedHullTexture(256, 0.8); // Engines
+    
+    // Pre-generate boss textures to avoid freezes during boss creation/evolution
+    // These are cached statically in SimpleBoss class
+    SimpleBoss.cachedHullTextures = textureManager.generateMetallicPanelTexture(512, 0.9);
+    SimpleBoss.cachedSaucerTextures = textureManager.generateMetallicPanelTexture(1024, 0.92);
+    
+    // Also pre-generate some common metallic textures at various resolutions
+    textureManager.generateMetallicPanelTexture(256, 0.85);
+    textureManager.generateMetallicPanelTexture(128, 0.8);
+    
+    // Pre-generate SpaceArena textures that are created during startGame()
+    // These cause major freezes if not preloaded
+    if (loadingText) {
+      loadingText.textContent = 'Generating environment textures...';
+    }
+    textureManager.generatePlatformTexture(512);  // Platform texture for SpaceArena
+    textureManager.generateAsteroidTexture(512);   // Asteroid texture for SpaceArena
+    
+    // Pre-generate particle textures for GPUParticleSystem
+    // Multiple particle systems use these during gameplay
+    if (loadingText) {
+      loadingText.textContent = 'Loading particle effects...';
+    }
+    this.preloadParticleTextures();
+    
+    // Warm up post-processing shaders to compile them before gameplay
+    if (loadingText) {
+      loadingText.textContent = 'Compiling shaders...';
+    }
+    this.warmupShaders();
+    
+    if (loadingText) {
+      loadingText.textContent = 'Finalizing game assets...';
+    }
+    
+    console.log('🎨 All textures pre-generated and cached');
+  }
+  
+  private preloadParticleTextures(): void {
+    // Create a shared particle texture that all GPUParticleSystem instances can use
+    // This prevents each system from creating its own texture during gameplay
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d')!;
+    
+    // Create gradient particle texture
+    const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(0.2, 'rgba(255, 255, 255, 0.8)');
+    gradient.addColorStop(0.4, 'rgba(255, 200, 100, 0.6)');
+    gradient.addColorStop(0.6, 'rgba(255, 100, 50, 0.4)');
+    gradient.addColorStop(1, 'rgba(255, 50, 0, 0)');
+    
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 64, 64);
+    
+    // Store the texture for later use
+    const particleTexture = new THREE.CanvasTexture(canvas);
+    particleTexture.needsUpdate = true;
+    
+    // Cache it in TextureManager or a static property
+    (window as any).__cachedParticleTexture = particleTexture;
+    
+    console.log('✨ Particle textures preloaded');
+  }
+  
+  private warmupShaders(): void {
+    // Force shader compilation by rendering a frame with post-processing
+    // This compiles all shaders before actual gameplay starts
+    if (this.postProcessingManager) {
+      // Create a temporary scene with basic geometry
+      const tempScene = new THREE.Scene();
+      const tempGeometry = new THREE.BoxGeometry(1, 1, 1);
+      const tempMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const tempMesh = new THREE.Mesh(tempGeometry, tempMaterial);
+      tempScene.add(tempMesh);
+      
+      // Add lights to trigger more shader paths
+      const tempLight = new THREE.PointLight(0xffffff, 1);
+      tempScene.add(tempLight);
+      
+      // Render one frame to compile shaders
+      this.postProcessingManager.render(0.016);
+      
+      // Clean up
+      tempGeometry.dispose();
+      tempMaterial.dispose();
+      tempScene.clear();
+      
+      console.log('🎨 Shaders warmed up and compiled');
+    }
   }
   
   private preCreateUIElements(): void {
     // Pre-create all UI elements to avoid DOM manipulation during gameplay
+    
+    // Remove any existing menus first
+    const existingMenu = document.getElementById('main-menu');
+    if (existingMenu) existingMenu.remove();
+    
+    const existingPause = document.getElementById('pause-menu');
+    if (existingPause) existingPause.remove();
+    
+    const existingGameOver = document.getElementById('game-over');
+    if (existingGameOver) existingGameOver.remove();
     
     // Main menu
     this.menuContainer = document.createElement('div');
@@ -460,12 +573,45 @@ export class Game {
       fullscreenBtn.style.display = 'none';
     }
 
+    // Clean up existing game entities before creating new ones
+    if (this.gameUI) {
+      this.gameUI.dispose();
+      this.gameUI = null;
+    }
+    
+    if (this.player) {
+      this.player.dispose();
+      this.player = null;
+    }
+    
+    if (this.boss) {
+      this.boss.dispose();
+      this.boss = null;
+    }
+    
+    if (this.arena) {
+      this.arena.dispose();
+      this.arena = null;
+    }
+    
+    // Clear minions
+    for (const minion of this.minions) {
+      minion.dispose();
+    }
+    this.minions = [];
+    
+    // Clear projectiles
+    for (const projectile of this.projectiles) {
+      this.disposeProjectile(projectile);
+      this.scene.remove(projectile);
+    }
+    this.projectiles = [];
+
     this.gameState = GameState.PLAYING;
     this.score = 0;
     this.bossLevel = 1;
     this.comboMultiplier = 1;
     this.lastMinionSpawnTime = Date.now();
-    this.minions = [];
 
     // Initialize game entities
     this.arena = new SpaceArena(this.scene);
@@ -637,6 +783,9 @@ export class Game {
     }
 
     console.log('🎮 Starting game engine...');
+    
+    // Add a small delay to ensure all textures are fully cached and GPU-ready
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     this.isRunning = true;
     this.gameLoop();
@@ -720,7 +869,7 @@ export class Game {
     this.minions = [];
 
     if (this.arena) {
-      // Arena should have dispose method
+      this.arena.dispose();
       this.arena = null;
     }
 
@@ -1127,9 +1276,9 @@ export class Game {
       let shouldRemove = false;
 
       if (owner === 'player') {
-        // Check collision with boss
+        // Check collision with boss - increased hitbox to cover entire spacecraft
         const distance = projectile.position.distanceTo(this.boss.position);
-        if (distance < 2) {
+        if (distance < 4.5) { // Increased from 2 to cover saucer (radius 3) + nacelles
           this.handlePlayerHit(damage, projectile.position.clone());
           shouldRemove = true;
         }
@@ -1168,7 +1317,7 @@ export class Game {
         // Check collision with player
         const distance = projectile.position.distanceTo(this.player.position);
         if (distance < 1.5) {
-          this.handleBossHit(damage, projectile.position.clone());
+          this.player.takeDamage(damage);
           shouldRemove = true;
         }
       }
@@ -1297,44 +1446,48 @@ export class Game {
     `;
     
     // Trigger animation on next frame
-    requestAnimationFrame(() => {
-      if (this.announcementDiv) {
-        this.announcementDiv.style.transform = 'translate(-50%, -50%) scale(1)';
-        this.announcementDiv.style.opacity = '1';
+    const animFrame = requestAnimationFrame(() => {
+      this.animationFrames.delete(animFrame);
+      if (!this.announcementDiv) return;
+      
+      this.announcementDiv.style.transform = 'translate(-50%, -50%) scale(1)';
+      this.announcementDiv.style.opacity = '1';
 
-        // Fade out
-        const timer1 = setTimeout(() => {
-          this.timers.delete(timer1);
+      // Fade out after 2 seconds
+      const timer1 = setTimeout(() => {
+        this.timers.delete(timer1);
+        if (!this.announcementDiv) return;
+        
+        this.announcementDiv.style.transform = 'translate(-50%, -50%) scale(0.8)';
+        this.announcementDiv.style.opacity = '0';
+        
+        // Hide after transition
+        const timer2 = setTimeout(() => {
+          this.timers.delete(timer2);
           if (this.announcementDiv) {
-            this.announcementDiv.style.transform = 'translate(-50%, -50%) scale(0.8)';
-            this.announcementDiv.style.opacity = '0';
-            const timer2 = setTimeout(() => {
-              this.timers.delete(timer2);
-              if (this.announcementDiv) {
-                this.announcementDiv.style.display = 'none';
-              }
-            }, 500) as any;
-            this.timers.add(timer2);
+            this.announcementDiv.style.display = 'none';
           }
-        }, 2000) as any;
-        this.timers.add(timer1);
-      }
+        }, 500) as any;
+        this.timers.add(timer2);
+      }, 2000) as any;
+      this.timers.add(timer1);
     });
+    this.animationFrames.add(animFrame);
   }
 
   private createHitEffect(position: THREE.Vector3): void {
     // Ultra-simple hit effect to prevent any freezing (using object pools)
     const particle = this.objectPoolManager.particlePool.get();
     if (particle) {
-      const color = new THREE.Color(0xffaa00);
-      const velocity = new THREE.Vector3(
+      Game.tempColor.setHex(0xffaa00);
+      Game.tempVelocity.set(
         (Math.random() - 0.5) * 2,
         Math.random() * 2,
         (Math.random() - 0.5) * 2
       );
-      const acceleration = new THREE.Vector3(0, -1, 0);
+      Game.tempAcceleration.set(0, -1, 0);
 
-      particle.initialize(position, velocity, acceleration, color, 0.5, 1.5, 0);
+      particle.initialize(position, Game.tempVelocity, Game.tempAcceleration, Game.tempColor, 0.5, 1.5, 0);
       this.scene.add(particle.mesh);
 
       // The particle will automatically clean itself up after its lifetime

@@ -12,17 +12,22 @@ export class SimpleBoss {
   
   private scene: THREE.Scene;
   private target: THREE.Vector3;
-  private moveSpeed: number = 5;
+  private moveSpeed: number = 3.2; // Reduced to 0.8x of original speed (was 4)
   private attackCooldown: number = 2;
   private attackTimer: number = 0;
   // private electrons: THREE.Mesh[] = []; // Unused variable
   private nucleus!: THREE.Mesh;
   private time: number = 0;
   private originalSpawnPosition: THREE.Vector3;
+  private targetRotation: number = 0; // For smooth rotation with drift
+  private currentRotation: number = 0; // Current rotation for drift effect
+  private rotationSpeed: number = 0.8; // How fast the boss can turn (radians per second) - much slower for heavy drift
   // private crystallineShards: THREE.Mesh[] = []; // Removed - using spacecraft model now
   private corruptionAura: THREE.Points | null = null;
   private textureManager: TextureManager;
   private attackAnimationId: number | null = null;
+  private currentBeam: THREE.Mesh | null = null; // Track current beam to ensure cleanup
+  private currentFlash: THREE.PointLight | null = null; // Track current flash
   private damageAnimationIds: Set<number> = new Set();
   private lastAuraUpdate: number = 0;
   private auraUpdateInterval: number = 0.033; // ~30fps for aura
@@ -39,13 +44,22 @@ export class SimpleBoss {
   private warpNacelleMeshes: THREE.Mesh[] = [];
   
   // Static texture cache to prevent regeneration during evolve
-  private static cachedHullTextures: any = null;
-  private static cachedSaucerTextures: any = null;
+  public static cachedHullTextures: any = null;
+  public static cachedSaucerTextures: any = null;
+  
+  // Static material pools to prevent shader recompilation
+  private static projectileMaterialPool: THREE.MeshPhysicalMaterial[] = [];
+  private static beamMaterial: THREE.MeshPhysicalMaterial | null = null;
+  private static particleMaterial: THREE.MeshBasicMaterial | null = null;
+  
+  // Static geometry pool to prevent geometry recreation
+  private static torpedoGeometry: THREE.SphereGeometry | null = null;
+  private static beamGeometry: THREE.CylinderGeometry | null = null;
 
   constructor(scene: THREE.Scene, level: number = 1) {
     this.scene = scene;
     this.level = level;
-    this.originalSpawnPosition = new THREE.Vector3(0, 5, -10); // Keep within circular arena
+    this.originalSpawnPosition = new THREE.Vector3(0, 1, -10); // Same height as player (y=1)
     this.position = this.originalSpawnPosition.clone();
     this.target = new THREE.Vector3();
     this.mesh = new THREE.Group();
@@ -58,9 +72,58 @@ export class SimpleBoss {
     // Scale attack rate with level
     this.attackCooldown = Math.max(0.5, 2 - (level * 0.1));
     
+    // Initialize material pools to prevent shader recompilation
+    this.initializeMaterialPools();
+    
     this.createAtomModel();
     this.mesh.position.copy(this.position);
+    this.mesh.position.y = 1; // Ensure boss starts at player height
     this.scene.add(this.mesh);
+  }
+  
+  private initializeMaterialPools(): void {
+    // Initialize projectile material pool (create once, reuse forever)
+    if (SimpleBoss.projectileMaterialPool.length === 0) {
+      // Pre-create 20 projectile materials (enough for max projectile count)
+      for (let i = 0; i < 20; i++) {
+        SimpleBoss.projectileMaterialPool.push(new THREE.MeshPhysicalMaterial({
+          color: 0xff6600,
+          emissive: new THREE.Color(0xff4400),
+          emissiveIntensity: 3.0,
+          metalness: 0.0,
+          roughness: 0.0,
+          transmission: 0.7,
+          thickness: 0.1,
+          clearcoat: 1.0,
+          clearcoatRoughness: 0.0,
+          transparent: true,
+          opacity: 0.95
+        }));
+      }
+    }
+    
+    // Initialize beam material (single instance)
+    if (!SimpleBoss.beamMaterial) {
+      SimpleBoss.beamMaterial = new THREE.MeshPhysicalMaterial({
+        color: 0xff8800,
+        emissive: new THREE.Color(0xff6600),
+        emissiveIntensity: 4.0,
+        metalness: 0.0,
+        roughness: 0.1,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide
+      });
+    }
+    
+    // Initialize particle material for damage effects
+    if (!SimpleBoss.particleMaterial) {
+      SimpleBoss.particleMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffaa00,
+        transparent: true,
+        opacity: 0.9
+      });
+    }
   }
 
   private createAtomModel(): void {
@@ -130,6 +193,7 @@ export class SimpleBoss {
     
     this.nucleus = new THREE.Mesh(hullGeometry, hullMaterial);
     this.nucleus.rotation.z = Math.PI / 2;
+    this.nucleus.rotation.y = -Math.PI / 2; // Rotate to face forward
     this.nucleus.position.set(0, 0, -1);
     this.nucleus.castShadow = true;
     this.nucleus.receiveShadow = true;
@@ -205,6 +269,7 @@ export class SimpleBoss {
       const nacelle = new THREE.Mesh(nacelleGeometry, nacelleMaterial);
       nacelle.position.set(side * 2.2, 0, -2);
       nacelle.rotation.z = Math.PI / 2;
+      nacelle.rotation.y = -Math.PI / 2; // Align with forward direction
       nacelle.castShadow = true;
       this.mesh.add(nacelle);
       
@@ -388,6 +453,7 @@ export class SimpleBoss {
       const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
       const line = new THREE.Line(lineGeometry, lineMaterial);
       line.rotation.z = Math.PI / 2;
+      line.rotation.y = -Math.PI / 2; // Align with forward direction
       this.mesh.add(line);
     }
     
@@ -490,18 +556,51 @@ export class SimpleBoss {
       this.phase = 1;
     }
     
-    // Enhanced movement AI with phase-based behavior
+    // Enhanced movement AI with phase-based behavior and drift mechanics
     this.target.copy(playerPosition);
     const direction = this.target.clone().sub(this.position);
     const distance = direction.length();
     
+    // Calculate target rotation (where boss wants to face)
+    if (direction.length() > 0.1) {
+      this.targetRotation = Math.atan2(direction.x, direction.z);
+    }
+    
+    // Apply rotation smoothing/drift (boss doesn't instantly turn)
+    const maxRotationSpeed = this.rotationSpeed * deltaTime; // Maximum rotation per frame
+    const rotationDiff = this.targetRotation - this.currentRotation;
+    
+    // Normalize rotation difference to [-PI, PI]
+    let normalizedDiff = rotationDiff;
+    while (normalizedDiff > Math.PI) normalizedDiff -= Math.PI * 2;
+    while (normalizedDiff < -Math.PI) normalizedDiff += Math.PI * 2;
+    
+    // Apply rotation with maximum turn speed (creates drift effect)
+    if (Math.abs(normalizedDiff) < maxRotationSpeed) {
+      // Close enough to target, snap to it
+      this.currentRotation = this.targetRotation;
+    } else {
+      // Apply maximum rotation speed in the correct direction
+      this.currentRotation += Math.sign(normalizedDiff) * maxRotationSpeed;
+    }
+    
+    // Keep rotation in [-PI, PI] range
+    while (this.currentRotation > Math.PI) this.currentRotation -= Math.PI * 2;
+    while (this.currentRotation < -Math.PI) this.currentRotation += Math.PI * 2;
+    
+    // Move in the direction the boss is currently facing (not necessarily toward player)
+    const moveDirection = new THREE.Vector3(
+      Math.sin(this.currentRotation),
+      0,
+      Math.cos(this.currentRotation)
+    );
+    
     if (distance > 8) {
-      direction.normalize();
-      const speed = this.moveSpeed * (1 + (this.phase - 1) * 0.3);
-      this.position.add(direction.multiplyScalar(speed * deltaTime));
+      const speed = this.moveSpeed * (1 + (this.phase - 1) * 0.2); // Reduced phase speed bonus
+      this.position.add(moveDirection.multiplyScalar(speed * deltaTime));
     } else if (distance < 5) {
-      direction.normalize();
-      this.position.sub(direction.multiplyScalar(this.moveSpeed * deltaTime * 0.5));
+      // Move backward but still with current facing direction
+      this.position.sub(moveDirection.multiplyScalar(this.moveSpeed * deltaTime * 0.4));
     }
     
     // Keep within circular bounds
@@ -523,38 +622,40 @@ export class SimpleBoss {
       }
     }
     
-    // Update mesh position
-    this.mesh.position.copy(this.position);
+    // Update mesh position - ensure it's exactly at boss position for hit detection
+    this.mesh.position.x = this.position.x;
+    this.mesh.position.y = this.position.y + Math.sin(this.time * 0.7) * 0.2; // Small float animation
+    this.mesh.position.z = this.position.z;
     
     // Animate spacecraft with realistic movement
-    // Banking and tilting based on movement direction
-    const targetRotationY = Math.atan2(direction.x, direction.z);
-    this.mesh.rotation.y = THREE.MathUtils.lerp(this.mesh.rotation.y, targetRotationY, deltaTime * 2);
+    // Use the smoothed rotation for the mesh
+    this.mesh.rotation.y = this.currentRotation;
+    
+    // Boss position stays at constant height for consistent hit detection
+    // The mesh can float slightly but the hitbox position remains stable
+    this.position.y = 1; // Same as player height
     
     // Pitch when moving forward/backward
     const targetPitch = distance > 8 ? -0.08 : (distance < 5 ? 0.08 : 0);
     this.mesh.rotation.x = THREE.MathUtils.lerp(this.mesh.rotation.x, targetPitch, deltaTime * 2);
     
-    // Banking when turning
-    const turnRate = targetRotationY - this.mesh.rotation.y;
-    this.mesh.rotation.z = THREE.MathUtils.lerp(this.mesh.rotation.z, -turnRate * 0.2, deltaTime * 3);
+    // Banking when turning (enhanced for drift effect)
+    const turnRate = normalizedDiff; // Use the normalized difference we already calculated
+    this.mesh.rotation.z = THREE.MathUtils.lerp(this.mesh.rotation.z, -turnRate * 0.5, deltaTime * 2); // More banking
     
-    // Subtle hovering motion
-    this.mesh.position.y = 5 + Math.sin(this.time * 0.7) * 0.2;
+    // Hovering motion is now handled above when setting mesh position
     
     // Update engine glow intensity
     this.updateEngineGlows(deltaTime);
     
     // Update cached mesh emissive intensities directly (no traversal)
-    // Update phaser arrays
+    // Update phaser arrays - REMOVED FLASHING ANIMATION THAT CAUSED FPS DROPS
+    // The rapid Math.sin(this.time * 15) was causing performance issues
     this.phaserMeshes.forEach(mesh => {
       if (mesh.material && (mesh.material as THREE.MeshPhysicalMaterial).emissive) {
         const mat = mesh.material as THREE.MeshPhysicalMaterial;
-        if (this.isAttacking) {
-          mat.emissiveIntensity = 1.0 + Math.sin(this.time * 15) * 0.5;
-        } else {
-          mat.emissiveIntensity = 0.4 + this.phase * 0.2;
-        }
+        // Keep constant glow, no flashing
+        mat.emissiveIntensity = 0.4 + this.phase * 0.2;
       }
     });
     
@@ -630,31 +731,38 @@ export class SimpleBoss {
     // Fire photon torpedoes
     const projectileCount = Math.min(this.phase * 2, 6);
     
+    // Create shared geometry once if not exists
+    if (!SimpleBoss.torpedoGeometry) {
+      SimpleBoss.torpedoGeometry = new THREE.SphereGeometry(0.25, 8, 8);
+    }
+    
     for (let i = 0; i < projectileCount; i++) {
-      // Create photon torpedo
-      const torpedoGeometry = new THREE.SphereGeometry(0.25, 8, 8);
-      const torpedoMaterial = new THREE.MeshPhysicalMaterial({
-        color: 0xff6600,
-        emissive: new THREE.Color(0xff4400),
-        emissiveIntensity: 3.0,
-        metalness: 0.0,
-        roughness: 0.0,
-        transmission: 0.7,
-        thickness: 0.1,
-        clearcoat: 1.0,
-        transparent: true,
-        opacity: 0.95
-      });
+      // Use pooled geometry and material - NO NEW GEOMETRY CREATION!
+      const torpedoMaterial = SimpleBoss.projectileMaterialPool[i % SimpleBoss.projectileMaterialPool.length];
       
-      const torpedo = new THREE.Mesh(torpedoGeometry, torpedoMaterial);
+      const torpedo = new THREE.Mesh(SimpleBoss.torpedoGeometry, torpedoMaterial);
       
       // Launch from torpedo tubes (front of ship)
       torpedo.position.copy(this.mesh.position);
-      torpedo.position.z += 2;
-      torpedo.position.x += (i % 2 - 0.5) * 0.4;
+      const forwardOffset = 2; // Distance in front of ship
+      const sideOffset = (i % 2 - 0.5) * 0.4; // Spread between tubes
       
-      // Calculate targeting
-      const baseDirection = this.target.clone().sub(torpedo.position).normalize();
+      // Calculate spawn position based on boss's current rotation
+      torpedo.position.x += Math.sin(this.currentRotation) * forwardOffset + Math.cos(this.currentRotation) * sideOffset;
+      torpedo.position.z += Math.cos(this.currentRotation) * forwardOffset - Math.sin(this.currentRotation) * sideOffset;
+      
+      // Calculate targeting - fire in the direction the boss is currently facing with some aim toward player
+      // Mix between current facing direction and target direction for more realistic aiming
+      const facingDirection = new THREE.Vector3(
+        Math.sin(this.currentRotation),
+        0,
+        Math.cos(this.currentRotation)
+      );
+      const targetDirection = this.target.clone().sub(torpedo.position).normalize();
+      
+      // Blend 70% facing direction with 30% target direction for slight tracking
+      const baseDirection = facingDirection.multiplyScalar(0.7).add(targetDirection.multiplyScalar(0.3)).normalize();
+      
       const spreadAngle = ((i - projectileCount / 2) / projectileCount) * 0.3;
       const direction = new THREE.Vector3(
         baseDirection.x * Math.cos(spreadAngle) - baseDirection.z * Math.sin(spreadAngle),
@@ -666,7 +774,7 @@ export class SimpleBoss {
       // Visual effect handled by emissive material instead
       
       torpedo.userData = {
-        velocity: direction.multiplyScalar(25 + this.phase * 5),
+        velocity: direction.multiplyScalar(12 + this.phase * 2), // Reduced projectile speed for better gameplay
         damage: 15 * this.phase,
         owner: 'boss'
       };
@@ -675,8 +783,8 @@ export class SimpleBoss {
       this.scene.add(torpedo);
     }
     
-    // Phaser beam effect
-    this.createPhaserEffect();
+    // Phaser beam effect - DISABLED FOR TESTING
+    // this.createPhaserEffect();
     
     setTimeout(() => {
       this.isAttacking = false;
@@ -692,18 +800,28 @@ export class SimpleBoss {
       this.attackAnimationId = null;
     }
     
-    // Create phaser beam effect
-    const beamGeometry = new THREE.CylinderGeometry(0.08, 0.04, 8, 6);
-    const beamMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xff8800,
-      emissive: new THREE.Color(0xff6600),
-      emissiveIntensity: 4.0,
-      transparent: true,
-      opacity: 0.9,
-      side: THREE.DoubleSide
-    });
+    // Clean up any existing beam/flash that wasn't properly disposed
+    if (this.currentBeam) {
+      this.scene.remove(this.currentBeam);
+      if (this.currentBeam.geometry) this.currentBeam.geometry.dispose();
+      if (this.currentBeam.material instanceof THREE.Material) {
+        this.currentBeam.material.dispose();
+      }
+      this.currentBeam = null;
+    }
+    if (this.currentFlash) {
+      this.scene.remove(this.currentFlash);
+      this.currentFlash = null;
+    }
     
-    const beam = new THREE.Mesh(beamGeometry, beamMaterial);
+    // Use pooled geometry to avoid creating new geometry every shot
+    if (!SimpleBoss.beamGeometry) {
+      SimpleBoss.beamGeometry = new THREE.CylinderGeometry(0.08, 0.04, 8, 6);
+    }
+    // Clone the pooled material so we can modify it without affecting the pool
+    const beamMaterial = SimpleBoss.beamMaterial!.clone();
+    
+    const beam = new THREE.Mesh(SimpleBoss.beamGeometry, beamMaterial);
     const direction = this.target.clone().sub(this.mesh.position);
     const distance = direction.length();
     
@@ -714,11 +832,13 @@ export class SimpleBoss {
     beam.rotateX(Math.PI / 2);
     
     this.scene.add(beam);
+    this.currentBeam = beam; // Track reference
     
     // Flash effect
     const flash = new THREE.PointLight(0xff8800, 8, 20);
     flash.position.copy(beam.position);
     this.scene.add(flash);
+    this.currentFlash = flash; // Track reference
     
     // Animate and remove
     const startTime = Date.now();
@@ -732,10 +852,17 @@ export class SimpleBoss {
         beam.scale.z = 1 + elapsed * 1.5;
         this.attackAnimationId = requestAnimationFrame(animate);
       } else {
-        this.scene.remove(beam);
-        this.scene.remove(flash);
-        beamGeometry.dispose();
-        beamMaterial.dispose();
+        // Properly clean up the beam
+        if (this.currentBeam === beam) {
+          this.scene.remove(beam);
+          // Don't dispose the pooled geometry!
+          beamMaterial.dispose(); // Only dispose the cloned material
+          this.currentBeam = null;
+        }
+        if (this.currentFlash === flash) {
+          this.scene.remove(flash);
+          this.currentFlash = null;
+        }
         this.attackAnimationId = null;
       }
     };
@@ -744,15 +871,9 @@ export class SimpleBoss {
   
   
   private updateEngineGlows(_deltaTime: number): void {
-    // Update engine glow effects based on movement and phase
-    this.mesh.traverse(child => {
-      if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshPhysicalMaterial) {
-        // Update nacelle glow
-        if (child.material.emissive && child.material.emissive.getHex() === 0xff2200) {
-          child.material.emissiveIntensity = 1.8 + this.phase * 0.3 + Math.sin(this.time * 4) * 0.2;
-        }
-      }
-    });
+    // REMOVED EXPENSIVE MESH TRAVERSAL - This was causing the FPS drops!
+    // Engine glows are already updated via cached engineMeshes array in update()
+    // No need to traverse the entire mesh hierarchy every frame
   }
 
   public takeDamage(amount: number): void {
@@ -805,10 +926,8 @@ export class SimpleBoss {
       const needed = particleCount - this.particlePool.length;
       for (let i = 0; i < needed; i++) {
         const particleGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-        const particleMaterial = new THREE.MeshBasicMaterial({
-          transparent: true,
-          opacity: 0.9
-        });
+        // Use pooled particle material instead of creating new one
+        const particleMaterial = SimpleBoss.particleMaterial!;
         const particle = new THREE.Mesh(particleGeometry, particleMaterial);
         this.particlePool.push({ mesh: particle, geometry: particleGeometry, material: particleMaterial });
       }
@@ -871,6 +990,28 @@ export class SimpleBoss {
   }
 
   public evolve(): void {
+    // Cancel any running animations before evolving
+    if (this.attackAnimationId !== null) {
+      cancelAnimationFrame(this.attackAnimationId);
+      this.attackAnimationId = null;
+    }
+    this.damageAnimationIds.forEach(id => cancelAnimationFrame(id));
+    this.damageAnimationIds.clear();
+    
+    // Clean up any lingering beam/flash before evolving
+    if (this.currentBeam) {
+      this.scene.remove(this.currentBeam);
+      if (this.currentBeam.geometry) this.currentBeam.geometry.dispose();
+      if (this.currentBeam.material instanceof THREE.Material) {
+        this.currentBeam.material.dispose();
+      }
+      this.currentBeam = null;
+    }
+    if (this.currentFlash) {
+      this.scene.remove(this.currentFlash);
+      this.currentFlash = null;
+    }
+    
     this.level++;
     this.maxHealth = 100 * Math.pow(1.5, this.level - 1);
     this.health = this.maxHealth;
@@ -923,6 +1064,20 @@ export class SimpleBoss {
     }
     this.damageAnimationIds.forEach(id => cancelAnimationFrame(id));
     this.damageAnimationIds.clear();
+    
+    // Clean up any lingering beam/flash
+    if (this.currentBeam) {
+      this.scene.remove(this.currentBeam);
+      if (this.currentBeam.geometry) this.currentBeam.geometry.dispose();
+      if (this.currentBeam.material instanceof THREE.Material) {
+        this.currentBeam.material.dispose();
+      }
+      this.currentBeam = null;
+    }
+    if (this.currentFlash) {
+      this.scene.remove(this.currentFlash);
+      this.currentFlash = null;
+    }
     
     // Clean up any remaining particles or effects
     

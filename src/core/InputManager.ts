@@ -19,6 +19,14 @@ export class InputManager {
   private keys: Map<string, KeyState> = new Map();
   private mouseState: MouseState;
   private previousMouseState: MouseState;
+  
+  // Store bound event listeners for cleanup
+  private boundOnKeyDown: ((e: KeyboardEvent) => void) | null = null;
+  private boundOnKeyUp: ((e: KeyboardEvent) => void) | null = null;
+  private boundOnMouseMove: ((e: MouseEvent) => void) | null = null;
+  private boundOnMouseDown: ((e: MouseEvent) => void) | null = null;
+  private boundOnMouseUp: ((e: MouseEvent) => void) | null = null;
+  private boundPreventDefault: ((e: KeyboardEvent) => void) | null = null;
 
   constructor() {
     this.mouseState = this.createEmptyMouseState();
@@ -43,22 +51,29 @@ export class InputManager {
   }
 
   private setupEventListeners(): void {
-    // Keyboard events
-    document.addEventListener('keydown', this.onKeyDown.bind(this));
-    document.addEventListener('keyup', this.onKeyUp.bind(this));
-
-    // Mouse events
-    document.addEventListener('mousemove', this.onMouseMove.bind(this));
-    document.addEventListener('mousedown', this.onMouseDown.bind(this));
-    document.addEventListener('mouseup', this.onMouseUp.bind(this));
-
-    // Prevent default behavior for game controls
-    document.addEventListener('keydown', (e) => {
-      // Prevent default for common game keys
+    // Create bound functions
+    this.boundOnKeyDown = this.onKeyDown.bind(this);
+    this.boundOnKeyUp = this.onKeyUp.bind(this);
+    this.boundOnMouseMove = this.onMouseMove.bind(this);
+    this.boundOnMouseDown = this.onMouseDown.bind(this);
+    this.boundOnMouseUp = this.onMouseUp.bind(this);
+    this.boundPreventDefault = (e: KeyboardEvent) => {
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
         e.preventDefault();
       }
-    });
+    };
+    
+    // Keyboard events
+    document.addEventListener('keydown', this.boundOnKeyDown);
+    document.addEventListener('keyup', this.boundOnKeyUp);
+
+    // Mouse events
+    document.addEventListener('mousemove', this.boundOnMouseMove);
+    document.addEventListener('mousedown', this.boundOnMouseDown);
+    document.addEventListener('mouseup', this.boundOnMouseUp);
+
+    // Prevent default behavior for game controls
+    document.addEventListener('keydown', this.boundPreventDefault);
   }
 
   private onKeyDown(event: KeyboardEvent): void {
@@ -180,5 +195,31 @@ export class InputManager {
 
   public isMouseButtonJustReleased(button: number): boolean {
     return this.mouseState.buttons.get(button)?.justReleased ?? false;
+  }
+  
+  public dispose(): void {
+    // Remove all event listeners
+    if (this.boundOnKeyDown) {
+      document.removeEventListener('keydown', this.boundOnKeyDown);
+      document.removeEventListener('keydown', this.boundPreventDefault!);
+    }
+    if (this.boundOnKeyUp) document.removeEventListener('keyup', this.boundOnKeyUp);
+    if (this.boundOnMouseMove) document.removeEventListener('mousemove', this.boundOnMouseMove);
+    if (this.boundOnMouseDown) document.removeEventListener('mousedown', this.boundOnMouseDown);
+    if (this.boundOnMouseUp) document.removeEventListener('mouseup', this.boundOnMouseUp);
+    
+    // Clear state
+    this.keys.clear();
+    this.mouseState.buttons.clear();
+    
+    // Nullify references
+    this.boundOnKeyDown = null;
+    this.boundOnKeyUp = null;
+    this.boundOnMouseMove = null;
+    this.boundOnMouseDown = null;
+    this.boundOnMouseUp = null;
+    this.boundPreventDefault = null;
+    
+    console.log('🎮 InputManager disposed');
   }
 }
