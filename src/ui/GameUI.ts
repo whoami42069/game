@@ -684,26 +684,22 @@ export class GameUI {
   }
 
   public updateCombo(multiplier: number): void {
+    // Always display combo, including x1
+    this.comboElement.textContent = `COMBO x${multiplier}`;
+    
     if (multiplier > 1) {
-      this.comboElement.textContent = `COMBO x${multiplier}`;
+      // Higher combos get more emphasis
       this.comboElement.style.opacity = '1';
       this.comboElement.style.transform = 'scale(1.1)';
+      this.comboElement.style.color = multiplier >= 4 ? '#ff00ff' : '#ffaa00';
       setTimeout(() => {
         this.comboElement.style.transform = 'scale(1)';
       }, 100);
     } else {
-      // Show x1 briefly when combo resets
-      this.comboElement.textContent = 'COMBO x1';
-      this.comboElement.style.opacity = '0.5';
-      this.comboElement.style.transform = 'scale(0.9)';
-      
-      // Fade out after a short delay
-      setTimeout(() => {
-        this.comboElement.style.opacity = '0';
-        setTimeout(() => {
-          this.comboElement.textContent = '';
-        }, 200);
-      }, 300);
+      // x1 combo is always visible but less prominent
+      this.comboElement.style.opacity = '0.7';
+      this.comboElement.style.transform = 'scale(1)';
+      this.comboElement.style.color = '#ffaa00';
     }
   }
 

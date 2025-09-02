@@ -153,11 +153,18 @@ export class Game {
     this.initPostProcessing();
     this.initCombatFeedback();
     this.initStats();
-    this.preloadTextures(); // Pre-generate expensive textures
-    this.preCreateUIElements(); // Pre-create DOM elements
-    this.setupEventListeners();
-    // Auto-start the game for testing
-    this.startGame();
+    
+    // Defer heavy initialization to prevent initial freeze
+    requestAnimationFrame(() => {
+      this.preloadTextures(); // Pre-generate expensive textures
+      this.preCreateUIElements(); // Pre-create DOM elements
+      this.setupEventListeners();
+      
+      // Start game after a small delay to let textures fully load
+      setTimeout(() => {
+        this.startGame();
+      }, 100);
+    });
 
     console.log('🎮 Game instance created');
   }
@@ -272,47 +279,68 @@ export class Game {
       loadingText.textContent = 'Generating HD textures...';
     }
     
-    // Pre-generate the battle-damaged hull textures that Player uses
-    // These are cached statically in Player class
-    Player.cachedHullTextures = textureManager.generateBattleDamagedHullTexture(512, 0.4); // Main hull
-    Player.cachedWingTextures = textureManager.generateBattleDamagedHullTexture(256, 0.6); // Wings  
-    Player.cachedEngineTextures = textureManager.generateBattleDamagedHullTexture(256, 0.8); // Engines
+    // Load textures in batches to prevent blocking
+    const loadTexturesBatch1 = () => {
+      // Pre-generate the battle-damaged hull textures that Player uses
+      // These are cached statically in Player class
+      Player.cachedHullTextures = textureManager.generateBattleDamagedHullTexture(512, 0.4); // Main hull
+      Player.cachedWingTextures = textureManager.generateBattleDamagedHullTexture(256, 0.6); // Wings  
+      Player.cachedEngineTextures = textureManager.generateBattleDamagedHullTexture(256, 0.8); // Engines
+    };
     
-    // Pre-generate boss textures to avoid freezes during boss creation/evolution
-    // These are cached statically in SimpleBoss class
-    SimpleBoss.cachedHullTextures = textureManager.generateMetallicPanelTexture(512, 0.9);
-    SimpleBoss.cachedSaucerTextures = textureManager.generateMetallicPanelTexture(1024, 0.92);
+    const loadTexturesBatch2 = () => {
+      // Pre-generate boss textures to avoid freezes during boss creation/evolution
+      // These are cached statically in SimpleBoss class
+      SimpleBoss.cachedHullTextures = textureManager.generateMetallicPanelTexture(512, 0.9);
+      SimpleBoss.cachedSaucerTextures = textureManager.generateMetallicPanelTexture(1024, 0.92);
+      
+      // Also pre-generate some common metallic textures at various resolutions
+      textureManager.generateMetallicPanelTexture(256, 0.85);
+      textureManager.generateMetallicPanelTexture(128, 0.8);
+    };
     
-    // Also pre-generate some common metallic textures at various resolutions
-    textureManager.generateMetallicPanelTexture(256, 0.85);
-    textureManager.generateMetallicPanelTexture(128, 0.8);
+    const loadTexturesBatch3 = () => {
+      // Pre-generate SpaceArena textures that are created during startGame()
+      // These cause major freezes if not preloaded
+      if (loadingText) {
+        loadingText.textContent = 'Generating environment textures...';
+      }
+      textureManager.generatePlatformTexture(512);  // Platform texture for SpaceArena
+      textureManager.generateAsteroidTexture(512);   // Asteroid texture for SpaceArena
+    };
     
-    // Pre-generate SpaceArena textures that are created during startGame()
-    // These cause major freezes if not preloaded
-    if (loadingText) {
-      loadingText.textContent = 'Generating environment textures...';
-    }
-    textureManager.generatePlatformTexture(512);  // Platform texture for SpaceArena
-    textureManager.generateAsteroidTexture(512);   // Asteroid texture for SpaceArena
+    // Load batches with small delays between them
+    loadTexturesBatch1();
     
-    // Pre-generate particle textures for GPUParticleSystem
-    // Multiple particle systems use these during gameplay
-    if (loadingText) {
-      loadingText.textContent = 'Loading particle effects...';
-    }
-    this.preloadParticleTextures();
-    
-    // Warm up post-processing shaders to compile them before gameplay
-    if (loadingText) {
-      loadingText.textContent = 'Compiling shaders...';
-    }
-    this.warmupShaders();
-    
-    if (loadingText) {
-      loadingText.textContent = 'Finalizing game assets...';
-    }
-    
-    console.log('🎨 All textures pre-generated and cached');
+    setTimeout(() => {
+      loadTexturesBatch2();
+      
+      setTimeout(() => {
+        loadTexturesBatch3();
+        
+        // Pre-generate particle textures for GPUParticleSystem
+        // Multiple particle systems use these during gameplay
+        if (loadingText) {
+          loadingText.textContent = 'Loading particle effects...';
+        }
+        this.preloadParticleTextures();
+        
+        // Warm up post-processing shaders to compile them before gameplay
+        if (loadingText) {
+          loadingText.textContent = 'Compiling shaders...';
+        }
+        
+        setTimeout(() => {
+          this.warmupShaders();
+          
+          if (loadingText) {
+            loadingText.textContent = 'Finalizing game assets...';
+          }
+          
+          console.log('🎨 All textures pre-generated and cached');
+        }, 16);
+      }, 16);
+    }, 16);
   }
   
   private preloadParticleTextures(): void {
@@ -608,19 +636,33 @@ export class Game {
     this.bossLevel = 1;
     this.comboMultiplier = 1;
     this.lastMinionSpawnTime = Date.now();
-
-    // Initialize game entities
-    this.arena = new SpaceArena(this.scene);
-    this.player = new Player(this.scene);
-    this.boss = new SimpleBoss(this.scene, this.bossLevel);
+    
+    // Initialize UI first (lightweight)
     this.inventory = new Inventory();
     this.gameUI = new GameUI();
     this.performanceMonitor = new PerformanceMonitor();
+    
+    // Initialize combo display to show x1
+    if (this.gameUI) {
+      this.gameUI.updateCombo(this.comboMultiplier);
+    }
 
-    // Setup inventory hotkey usage listener
-    this.setupInventoryListener();
-
-    console.log('🎮 Game started!');
+    // Defer heavy entity creation to prevent freeze
+    requestAnimationFrame(() => {
+      // Initialize arena first
+      this.arena = new SpaceArena(this.scene);
+      
+      // Then create player and boss in next frame
+      requestAnimationFrame(() => {
+        this.player = new Player(this.scene);
+        this.boss = new SimpleBoss(this.scene, this.bossLevel);
+        
+        // Setup inventory hotkey usage listener
+        this.setupInventoryListener();
+        
+        console.log('🎮 Game started!');
+      });
+    });
   }
 
 
@@ -666,56 +708,62 @@ export class Game {
 
     // Drop items visually on boss defeat
     if (this.boss) {
-      const dropCount = 2 + Math.floor(Math.random() * 3);
-      const bounds = this.arena?.getBounds();
-      const arenaRadius = (bounds as any)?.radius || 20;
+      // Defer item drops to next frame to prevent blocking
+      requestAnimationFrame(() => {
+        const dropCount = 2 + Math.floor(Math.random() * 3);
+        const bounds = this.arena?.getBounds();
+        const arenaRadius = (bounds as any)?.radius || 20;
 
-      for (let i = 0; i < dropCount; i++) {
-        const itemData = ItemDrop.generateRandomDrop(1); // 100% chance
-        if (itemData) {
-          // Drop items around boss position
-          const angle = (i / dropCount) * Math.PI * 2;
-          const radius = 3 + Math.random() * 2;
-          const dropPosition = new THREE.Vector3(
-            this.boss.position.x + Math.cos(angle) * radius,
-            1,
-            this.boss.position.z + Math.sin(angle) * radius
-          );
+        for (let i = 0; i < dropCount; i++) {
+          const itemData = ItemDrop.generateRandomDrop(1); // 100% chance
+          if (itemData) {
+            // Drop items around boss position
+            const angle = (i / dropCount) * Math.PI * 2;
+            const radius = 3 + Math.random() * 2;
+            const dropPosition = new THREE.Vector3(
+              this.boss!.position.x + Math.cos(angle) * radius,
+              1,
+              this.boss!.position.z + Math.sin(angle) * radius
+            );
 
-          // Ensure drop is within circular arena bounds
-          const distFromCenter = Math.sqrt(dropPosition.x * dropPosition.x + dropPosition.z * dropPosition.z);
-          if (distFromCenter > arenaRadius - 1) {
-            const clampAngle = Math.atan2(dropPosition.z, dropPosition.x);
-            dropPosition.x = Math.cos(clampAngle) * (arenaRadius - 1);
-            dropPosition.z = Math.sin(clampAngle) * (arenaRadius - 1);
+            // Ensure drop is within circular arena bounds
+            const distFromCenter = Math.sqrt(dropPosition.x * dropPosition.x + dropPosition.z * dropPosition.z);
+            if (distFromCenter > arenaRadius - 1) {
+              const clampAngle = Math.atan2(dropPosition.z, dropPosition.x);
+              dropPosition.x = Math.cos(clampAngle) * (arenaRadius - 1);
+              dropPosition.z = Math.sin(clampAngle) * (arenaRadius - 1);
+            }
+
+            // Limit item drops to prevent performance issues
+            if (this.itemDrops.length >= this.MAX_ITEM_DROPS) {
+              const oldDrop = this.itemDrops.shift();
+              if (oldDrop) oldDrop.dispose();
+            }
+            
+            const itemDrop = new ItemDrop(this.scene, dropPosition, itemData);
+            this.itemDrops.push(itemDrop);
           }
-
-          // Limit item drops to prevent performance issues
-          if (this.itemDrops.length >= this.MAX_ITEM_DROPS) {
-            const oldDrop = this.itemDrops.shift();
-            if (oldDrop) oldDrop.dispose();
-          }
-          
-          const itemDrop = new ItemDrop(this.scene, dropPosition, itemData);
-          this.itemDrops.push(itemDrop);
         }
-      }
+      });
 
-      // Defer boss evolution to prevent freezing
-      // Use setTimeout instead of nested requestAnimationFrame to avoid blocking
+      // Defer boss evolution with longer delay to prevent freezing
+      // Split evolution into multiple frames
       setTimeout(() => {
         if (this.boss && this.gameState === GameState.PLAYING) {
-          // Show level announcement
+          // Show level announcement first
           this.showLevelAnnouncement(this.bossLevel);
           
-          // Evolve boss after a short delay to spread the load
+          // Evolve boss after announcement with extra delay
           setTimeout(() => {
             if (this.boss && this.gameState === GameState.PLAYING) {
-              this.boss.evolve();
+              // Wrap evolution in requestAnimationFrame for smoother transition
+              requestAnimationFrame(() => {
+                this.boss!.evolve();
+              });
             }
-          }, 100); // Small delay to let other operations complete
+          }, 300); // Longer delay to let announcement show first
         }
-      }, 50); // Let item drops render first
+      }, 100); // Initial delay before announcement
     }
 
     if (this.gameUI) {
@@ -1242,25 +1290,28 @@ export class Game {
   private spawnMinion(): void {
     if (!this.arena) return;
 
-    const bounds = this.arena.getBounds();
-    const radius = (bounds as any)?.radius || 20;
+    // Defer minion creation to prevent frame drops
+    requestAnimationFrame(() => {
+      const bounds = this.arena!.getBounds();
+      const radius = (bounds as any)?.radius || 20;
 
-    // Spawn at random position within arena
-    const angle = Math.random() * Math.PI * 2;
-    const distance = Math.random() * (radius - 5) + 5; // Keep away from center and edges
+      // Spawn at random position within arena
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.random() * (radius - 5) + 5; // Keep away from center and edges
 
-    const position = new THREE.Vector3(
-      Math.cos(angle) * distance,
-      1, // Match player height
-      Math.sin(angle) * distance
-    );
+      const position = new THREE.Vector3(
+        Math.cos(angle) * distance,
+        1, // Match player height
+        Math.sin(angle) * distance
+      );
 
-    const minion = new Minion(this.scene, position);
-    this.minions.push(minion);
+      const minion = new Minion(this.scene, position);
+      this.minions.push(minion);
 
-    if (this.gameUI) {
-      this.gameUI.showNotification('Minion Spawned!', '#ff00ff', 1000);
-    }
+      if (this.gameUI) {
+        this.gameUI.showNotification('Minion Spawned!', '#ff00ff', 1000);
+      }
+    });
   }
 
   private checkCollisions(): void {
