@@ -1,39 +1,164 @@
 import * as THREE from 'three';
+import { Arena, ArenaConfig } from '../Arena';
 import { TextureManager } from '@/core/TextureManager';
 import { BillboardManager } from '@/core/BillboardManager';
 
-export class SpaceArena {
-  private scene: THREE.Scene;
-  private platform: THREE.Group;
+export class SpaceArena extends Arena {
   private asteroids: THREE.Mesh[] = [];
   private debris: THREE.Group[] = [];
   private stars!: THREE.Points;
   private nebula!: THREE.Mesh;
   private cosmicParticles!: THREE.Points;
   private solarWind!: THREE.Points;
-  private time: number = 0;
-  private platformSize: number = 40;
   private textureManager: TextureManager;
   private billboardManager: BillboardManager;
 
   constructor(scene: THREE.Scene) {
-    this.scene = scene;
-    this.platform = new THREE.Group();
+    const config: ArenaConfig = {
+      name: 'Space Arena',
+      platformSize: 40,
+      bounds: {
+        min: new THREE.Vector3(-38, 0, -38),
+        max: new THREE.Vector3(38, 30, 38)
+      },
+      lighting: {
+        ambient: {
+          color: 0x0a0a1a,
+          intensity: 0.3
+        },
+        hemisphere: {
+          skyColor: 0x4040ff,
+          groundColor: 0x002030,
+          intensity: 0.5
+        },
+        directional: {
+          color: 0xffffff,
+          intensity: 1.5,
+          position: new THREE.Vector3(50, 100, 50),
+          castShadow: true
+        }
+      },
+      fog: {
+        type: 'exponential',
+        color: 0x000011,
+        density: 0.0008
+      },
+      environment: {
+        skybox: true,
+        particles: true,
+        animations: true
+      }
+    };
+
+    super(scene, config);
+    
     this.textureManager = TextureManager.getInstance();
     this.billboardManager = new BillboardManager(scene);
     
+    // Initialize the arena
+    this.initialize();
+    
+    // Create billboards after initialization
+    this.createBillboards();
+  }
+
+  protected setupEnvironment(): void {
     this.createSpaceSkybox();
     this.createStarField();
     this.createNebula();
-    this.createSpacePlatform();
-    this.createAsteroids();
-    this.createSpaceDebris();
     this.createCosmicParticles();
     this.createSolarWind();
-    this.createSpaceLighting();
     this.createPlanets();
-    this.setupSpaceAtmosphere();
-    this.createBillboards();
+  }
+
+  protected setupLighting(): void {
+    // Use standard lighting setup from base class
+    this.setupStandardLighting();
+    
+    // Add space-specific additional lights
+    const sunLight = this.lights.find(light => light instanceof THREE.DirectionalLight) as THREE.DirectionalLight;
+    if (sunLight) {
+      // Enhance shadow quality for space arena
+      sunLight.shadow.mapSize.width = 4096;  // Higher resolution shadows
+      sunLight.shadow.mapSize.height = 4096;
+      sunLight.shadow.bias = -0.001;  // Reduce shadow acne
+      sunLight.shadow.normalBias = 0.02;
+    }
+    
+    // Planet reflection light
+    const planetLight = new THREE.PointLight(0x4444ff, 0.8, 200);
+    planetLight.position.set(150, 30, -250);
+    this.addLight(planetLight);
+    
+    // Nebula light
+    const nebulaLight = new THREE.PointLight(0x9d00ff, 0.6, 150);
+    nebulaLight.position.set(100, 50, -200);
+    this.addLight(nebulaLight);
+    
+    // Platform core light
+    const coreLight = new THREE.PointLight(0x00ffff, 1.5, 50);
+    coreLight.position.set(0, 5, 0);
+    this.addLight(coreLight);
+  }
+
+  protected createPlatform(): void {
+    // Main platform with simple circular geometry
+    const platformGeometry = new THREE.CylinderGeometry(
+      this.config.platformSize, 
+      this.config.platformSize * 0.8, 
+      2, 
+      16
+    );
+    
+    // Get platform textures
+    const platformTextures = this.textureManager.generatePlatformTexture(512);
+    
+    const platformMaterial = new THREE.MeshPhysicalMaterial({
+      map: platformTextures.diffuse,
+      normalMap: platformTextures.normal,
+      normalScale: new THREE.Vector2(2.0, 2.0),
+      roughnessMap: platformTextures.roughness,
+      metalnessMap: platformTextures.metalness,
+      
+      // Simple material properties
+      metalness: 0.3,
+      roughness: 0.7,
+      emissive: 0x001122,
+      emissiveIntensity: 0.1
+    });
+    
+    const platform = new THREE.Mesh(platformGeometry, platformMaterial);
+    platform.position.y = -1;
+    platform.receiveShadow = true;
+    this.platform.add(platform);
+    
+    // Add SKRUMPEY text with space theme
+    this.createSkrumpeyText({
+      primaryColor: '#00ffff',
+      secondaryColor: '#ff00ff',
+      glowColor: '#00ffff',
+      opacity: 0.8,
+      size: { width: 20, height: 5 }
+    });
+    
+    // Add energy core in the center
+    const coreGeometry = new THREE.OctahedronGeometry(3, 2);
+    const coreMaterial = new THREE.MeshBasicMaterial({
+      color: 0x00ffff,
+      transparent: true,
+      opacity: 0.7,
+      wireframe: true
+    });
+    const core = new THREE.Mesh(coreGeometry, coreMaterial);
+    core.position.y = 0;
+    this.platform.add(core);
+    
+    this.scene.add(this.platform);
+  }
+
+  protected createHazards(): void {
+    this.createAsteroids();
+    this.createSpaceDebris();
   }
 
   private createSpaceSkybox(): void {
@@ -74,7 +199,7 @@ export class SpaceArena {
     });
     
     const sky = new THREE.Mesh(skyGeometry, skyMaterial);
-    this.scene.add(sky);
+    this.addEnvironmentObject(sky);
   }
 
   private createStarField(): void {
@@ -125,7 +250,7 @@ export class SpaceArena {
     });
     
     this.stars = new THREE.Points(geometry, starMaterial);
-    this.scene.add(this.stars);
+    this.addEnvironmentObject(this.stars);
   }
 
   private createNebula(): void {
@@ -174,58 +299,7 @@ export class SpaceArena {
     this.nebula = new THREE.Mesh(nebulaGeometry, nebulaMaterial);
     this.nebula.position.set(100, 50, -200);
     this.nebula.rotation.z = Math.PI / 6;
-    this.scene.add(this.nebula);
-  }
-
-  private createSpacePlatform(): void {
-    // Main platform with simple circular geometry
-    const platformGeometry = new THREE.CylinderGeometry(
-      this.platformSize, 
-      this.platformSize * 0.8, 
-      2, 
-      16
-    );
-    
-    // Get platform textures
-    const platformTextures = this.textureManager.generatePlatformTexture(512);
-    
-    const platformMaterial = new THREE.MeshPhysicalMaterial({
-      map: platformTextures.diffuse,
-      normalMap: platformTextures.normal,
-      normalScale: new THREE.Vector2(2.0, 2.0),
-      roughnessMap: platformTextures.roughness,
-      metalnessMap: platformTextures.metalness,
-      
-      // Simple material properties
-      metalness: 0.3,
-      roughness: 0.7,
-      emissive: 0x001122,
-      emissiveIntensity: 0.1
-    });
-    
-    const platform = new THREE.Mesh(platformGeometry, platformMaterial);
-    platform.position.y = -1;
-    platform.receiveShadow = true;
-    this.platform.add(platform);
-    
-    // Add SKRUMPEY text on the platform
-    this.addSkrumpeyText();
-    
-    // Add energy core in the center
-    const coreGeometry = new THREE.OctahedronGeometry(3, 2);
-    const coreMaterial = new THREE.MeshBasicMaterial({
-      color: 0x00ffff,
-      transparent: true,
-      opacity: 0.7,
-      wireframe: true
-    });
-    const core = new THREE.Mesh(coreGeometry, coreMaterial);
-    core.position.y = 0;
-    this.platform.add(core);
-    
-    // Border removed - no longer needed
-    
-    this.scene.add(this.platform);
+    this.addEnvironmentObject(this.nebula);
   }
 
   private createAsteroids(): void {
@@ -295,7 +369,7 @@ export class SpaceArena {
       asteroid.receiveShadow = true;
       
       this.asteroids.push(asteroid);
-      this.scene.add(asteroid);
+      this.addEnvironmentObject(asteroid);
     }
   }
 
@@ -354,53 +428,38 @@ export class SpaceArena {
       );
       
       this.debris.push(debrisGroup);
-      this.scene.add(debrisGroup);
+      this.addEnvironmentObject(debrisGroup);
     }
   }
 
   private createCosmicParticles(): void {
-    const particleCount = 200; // Reduced from 500 for performance
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(particleCount * 3);
-    const colors = new Float32Array(particleCount * 3);
-    
-    for (let i = 0; i < particleCount; i++) {
-      const i3 = i * 3;
-      
-      positions[i3] = (Math.random() - 0.5) * 200;
-      positions[i3 + 1] = Math.random() * 100;
-      positions[i3 + 2] = (Math.random() - 0.5) * 200;
-      
-      // Cosmic dust colors
-      colors[i3] = 0.5 + Math.random() * 0.5;
-      colors[i3 + 1] = 0.5 + Math.random() * 0.5;
-      colors[i3 + 2] = 0.8 + Math.random() * 0.2;
-    }
-    
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    
-    const material = new THREE.PointsMaterial({
-      size: 0.5,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.6,
-      blending: THREE.AdditiveBlending
+    // Use standardized particle system
+    this.cosmicParticles = this.createParticleSystem({
+      count: 200,
+      positionRange: { x: 200, y: 100, z: 200 },
+      colors: [
+        new THREE.Color(1, 1, 0.8),    // Light blue-white
+        new THREE.Color(0.8, 0.8, 1),  // Pale blue
+        new THREE.Color(0.9, 0.9, 1)   // Very pale blue
+      ],
+      size: { min: 0.3, max: 0.7 },
+      material: {
+        size: 0.5,
+        opacity: 0.6,
+        blending: THREE.AdditiveBlending
+      }
     });
-    
-    this.cosmicParticles = new THREE.Points(geometry, material);
-    this.scene.add(this.cosmicParticles);
+    this.addEnvironmentObject(this.cosmicParticles);
   }
 
   private createSolarWind(): void {
-    const particleCount = 300; // Reduced from 800 for performance
+    // Use standardized particle system with custom positioning
     const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(particleCount * 3);
-    const velocities = new Float32Array(particleCount * 3);
+    const positions = new Float32Array(300 * 3);
+    const velocities = new Float32Array(300 * 3);
     
-    for (let i = 0; i < particleCount; i++) {
+    for (let i = 0; i < 300; i++) {
       const i3 = i * 3;
-      
       positions[i3] = (Math.random() - 0.5) * 100;
       positions[i3 + 1] = Math.random() * 50;
       positions[i3 + 2] = -50 - Math.random() * 100;
@@ -422,7 +481,7 @@ export class SpaceArena {
     });
     
     this.solarWind = new THREE.Points(geometry, material);
-    this.scene.add(this.solarWind);
+    this.addEnvironmentObject(this.solarWind);
   }
 
   private createPlanets(): void {
@@ -440,7 +499,7 @@ export class SpaceArena {
     moon.position.set(-80, 60, -150);
     moon.castShadow = true;
     moon.receiveShadow = true;
-    this.scene.add(moon);
+    this.addEnvironmentObject(moon);
     
     // Distant planet
     const planetGeometry = new THREE.SphereGeometry(35, 32, 32);
@@ -453,7 +512,7 @@ export class SpaceArena {
     });
     const planet = new THREE.Mesh(planetGeometry, planetMaterial);
     planet.position.set(150, 30, -250);
-    this.scene.add(planet);
+    this.addEnvironmentObject(planet);
     
     // Planet rings
     const ringGeometry = new THREE.RingGeometry(40, 55, 64);
@@ -466,7 +525,7 @@ export class SpaceArena {
     const rings = new THREE.Mesh(ringGeometry, ringMaterial);
     rings.position.copy(planet.position);
     rings.rotation.x = Math.PI / 3;
-    this.scene.add(rings);
+    this.addEnvironmentObject(rings);
   }
 
   private createMoonTexture(): THREE.Texture {
@@ -494,108 +553,8 @@ export class SpaceArena {
     const texture = new THREE.CanvasTexture(canvas);
     return texture;
   }
-
-  private createSpaceLighting(): void {
-    // Enhanced ambient light with hemisphere for better colors
-    const hemisphereLight = new THREE.HemisphereLight(0x4040ff, 0x002030, 0.5);
-    this.scene.add(hemisphereLight);
-    
-    // Subtle ambient for base visibility
-    const ambient = new THREE.AmbientLight(0x0a0a1a, 0.3);
-    this.scene.add(ambient);
-    
-    // Main star light (sun) - Enhanced quality
-    const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
-    sunLight.position.set(50, 100, 50);
-    sunLight.castShadow = true;
-    sunLight.shadow.camera.near = 0.1;
-    sunLight.shadow.camera.far = 500;
-    sunLight.shadow.camera.left = -100;
-    sunLight.shadow.camera.right = 100;
-    sunLight.shadow.camera.top = 100;
-    sunLight.shadow.camera.bottom = -100;
-    sunLight.shadow.mapSize.width = 4096;  // Higher resolution shadows
-    sunLight.shadow.mapSize.height = 4096;
-    sunLight.shadow.bias = -0.001;  // Reduce shadow acne
-    sunLight.shadow.normalBias = 0.02;
-    this.scene.add(sunLight);
-    
-    // Planet reflection light
-    const planetLight = new THREE.PointLight(0x4444ff, 0.8, 200);
-    planetLight.position.set(150, 30, -250);
-    this.scene.add(planetLight);
-    
-    // Nebula light
-    const nebulaLight = new THREE.PointLight(0x9d00ff, 0.6, 150);
-    nebulaLight.position.set(100, 50, -200);
-    this.scene.add(nebulaLight);
-    
-    // Platform core light
-    const coreLight = new THREE.PointLight(0x00ffff, 1.5, 50);
-    coreLight.position.set(0, 5, 0);
-    this.scene.add(coreLight);
-  }
-
-  private setupSpaceAtmosphere(): void {
-    // Very subtle fog for depth
-    this.scene.fog = new THREE.FogExp2(0x000011, 0.0008);
-    
-    // Dark space background
-    this.scene.background = null; // Let skybox show through
-  }
   
-  private addSkrumpeyText(): void {
-    // Create canvas for text texture
-    const canvas = document.createElement('canvas');
-    canvas.width = 1024;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d')!;
-    
-    // Draw SKRUMPEY text
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    ctx.font = 'bold 120px Arial';
-    ctx.fillStyle = '#00ffff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.shadowColor = '#00ffff';
-    ctx.shadowBlur = 20;
-    ctx.fillText('SKRUMPEY', canvas.width / 2, canvas.height / 2);
-    
-    // Add glow effect
-    ctx.strokeStyle = '#ff00ff';
-    ctx.lineWidth = 3;
-    ctx.strokeText('SKRUMPEY', canvas.width / 2, canvas.height / 2);
-    
-    // Create texture from canvas
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.needsUpdate = true;
-    
-    // Create plane for text
-    const textGeometry = new THREE.PlaneGeometry(20, 5);
-    const textMaterial = new THREE.MeshBasicMaterial({
-      map: texture,
-      transparent: true,
-      opacity: 0.8,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending
-    });
-    
-    const textMesh = new THREE.Mesh(textGeometry, textMaterial);
-    textMesh.rotation.x = -Math.PI / 2;
-    textMesh.position.y = 0.1; // Just above platform
-    textMesh.position.z = 0;
-    
-    this.platform.add(textMesh);
-    
-    // Add second rotated text for visual effect
-    const textMesh2 = textMesh.clone();
-    textMesh2.rotation.z = Math.PI / 2;
-    textMesh2.material = textMaterial.clone();
-    textMesh2.material.opacity = 0.4;
-    this.platform.add(textMesh2);
-  }
+  // SKRUMPEY text creation moved to base class
 
   /**
    * Create professional billboards
@@ -609,12 +568,7 @@ export class SpaceArena {
     }, 1000);
   }
 
-  public update(deltaTime: number, isPaused: boolean = false): void {
-    // Skip heavy animations if game is paused or in background
-    if (isPaused) return;
-    
-    this.time += deltaTime;
-    
+  protected updateEnvironment(deltaTime: number): void {
     // Update billboard system
     this.billboardManager.update(deltaTime);
     
@@ -647,7 +601,9 @@ export class SpaceArena {
     if (border) {
       border.rotation.z += deltaTime * 0.3;
     }
-    
+  }
+
+  protected updateHazards(_deltaTime: number): void {
     // OPTIMIZED: Reduced animations for performance
     // Only animate every 3rd frame and fewer objects
     const frameSkip = Math.floor(this.time * 60) % 3 === 0;
@@ -665,31 +621,27 @@ export class SpaceArena {
       });
     }
     
-    // OPTIMIZED: Minimal particle updates
-    // Update only every 20th frame for performance
-    if (Math.floor(this.time * 60) % 20 === 0) {
-      // Update cosmic particles - only 1/50th per frame
-      if (this.cosmicParticles) {
-        const positions = this.cosmicParticles.geometry.attributes.position;
-        const step = 50;
-        const offset = Math.floor(this.time * 3) % step;
-        for (let i = offset; i < Math.min(positions.count, 50); i += step) { // Cap at 50
+    // OPTIMIZED: Use standardized particle updates
+    if (this.cosmicParticles) {
+      this.updateParticleSystem(this.cosmicParticles, {
+        frameSkip: 5,
+        batchSize: 50,
+        updateFunction: (positions, i) => {
           const y = positions.getY(i);
           positions.setY(i, y - 1.0);
           if (y < -10) {
             positions.setY(i, 100);
           }
         }
-        positions.needsUpdate = true;
-      }
-      
-      // Update solar wind - only 1/20th per frame
-      if (this.solarWind) {
-        const positions = this.solarWind.geometry.attributes.position;
-        const velocities = this.solarWind.geometry.attributes.velocity;
-        const step = 20;
-        const offset = Math.floor(this.time * 6) % step;
-        for (let i = offset; i < Math.min(positions.count, 100); i += step) { // Cap at 100
+      });
+    }
+    
+    if (this.solarWind) {
+      this.updateParticleSystem(this.solarWind, {
+        frameSkip: 5,
+        batchSize: 75,
+        updateFunction: (positions, i) => {
+          const velocities = this.solarWind.geometry.attributes.velocity as THREE.BufferAttribute;
           const z = positions.getZ(i);
           const vz = velocities.getZ(i);
           positions.setZ(i, z + vz * 0.1);
@@ -697,25 +649,16 @@ export class SpaceArena {
             positions.setZ(i, -150);
           }
         }
-        positions.needsUpdate = true;
-      }
+      });
     }
     
     // Update skybox shader
-    const sky = this.scene.children.find(child => 
-      child instanceof THREE.Mesh && child.material instanceof THREE.ShaderMaterial
+    const sky = this.environmentObjects.find(obj => 
+      obj instanceof THREE.Mesh && obj.material instanceof THREE.ShaderMaterial
     ) as THREE.Mesh | undefined;
     if (sky && sky.material instanceof THREE.ShaderMaterial) {
       (sky.material as THREE.ShaderMaterial).uniforms.time.value = this.time;
     }
-  }
-
-  public getBounds(): { min: THREE.Vector3, max: THREE.Vector3 } {
-    const halfSize = this.platformSize - 2;
-    return {
-      min: new THREE.Vector3(-halfSize, 0, -halfSize),
-      max: new THREE.Vector3(halfSize, 30, halfSize)
-    };
   }
 
   /**
@@ -725,11 +668,25 @@ export class SpaceArena {
     return this.billboardManager;
   }
 
+  protected finalizeSetup(): void {
+    // Dark space background
+    this.scene.background = null; // Let skybox show through
+  }
+
   /**
    * Dispose all resources
    */
   public dispose(): void {
+    // Dispose billboard manager first
     this.billboardManager.dispose();
+    
+    // Call parent dispose which handles lights, environment objects, and platform
+    super.dispose();
+    
+    // Clear SpaceArena-specific arrays
+    this.asteroids.length = 0;
+    this.debris.length = 0;
+    
     console.log('✅ Space Arena disposed');
   }
 }

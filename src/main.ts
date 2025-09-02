@@ -87,16 +87,7 @@ class NexusEternal {
     }
   }
 
-  private hideLoadingScreen(): void {
-    const loadingScreen = document.getElementById('loading-screen');
-    if (loadingScreen) {
-      loadingScreen.classList.add('hidden');
-      // Remove from DOM after animation
-      setTimeout(() => {
-        loadingScreen.remove();
-      }, 500);
-    }
-  }
+  // hideLoadingScreen method removed - loading screen is managed by Game.ts
 
   private updateLoadingProgress(percentage: number, text: string): void {
     const progressBar = document.getElementById('loading-progress');

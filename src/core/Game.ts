@@ -4,7 +4,12 @@ import { LoadingManager } from './LoadingManager';
 import { AudioManager } from './AudioManager';
 import { InputManager } from './InputManager';
 import { UIManager } from '@/ui/UIManager';
-import { SpaceArena } from '@/game/SpaceArena';
+import { Arena } from '@/game/Arena';
+import { SpaceArena } from '@/game/arenas/SpaceArena';
+import { AsteroidFieldArena } from '@/game/arenas/AsteroidFieldArena';
+import { NebulaZoneArena } from '@/game/arenas/NebulaZoneArena';
+import { MonadEcosystemArena } from '@/game/arenas/MonadEcosystemArena';
+import { MapSelectionScreen } from '@/ui/MapSelectionScreen';
 import { Player } from '@/game/Player';
 import { SimpleBoss } from '@/game/SimpleBoss';
 import { Minion } from '@/game/Minion';
@@ -68,7 +73,7 @@ export class Game {
   private static tempAcceleration = new THREE.Vector3();
 
   // Game entities
-  private arena: SpaceArena | null = null;
+  private arena: Arena | null = null;
   private player: Player | null = null;
   private boss: SimpleBoss | null = null;
   private minions: Minion[] = [];
@@ -105,6 +110,7 @@ export class Game {
   private gameOverScreen: HTMLDivElement | null = null;
   private flashDiv: HTMLDivElement | null = null;
   private announcementDiv: HTMLDivElement | null = null;
+  private mapSelectionScreen: MapSelectionScreen | null = null;
 
   // Track safe timer/interval wrappers
   private safeSetTimeout(callback: () => void, delay: number): number {
@@ -334,7 +340,7 @@ export class Game {
   private preloadedEntities: {
     player: Player | null;
     boss: SimpleBoss | null;
-    arena: SpaceArena | null;
+    arena: Arena | null;
     minions: Minion[];
   } = {
     player: null,
@@ -476,12 +482,12 @@ export class Game {
     
     for (let i = 0; i < warmupIterations; i++) {
       // Warm up collision detection
-      const dist = tempVec3.distanceTo(new THREE.Vector3(i, i, i));
+      tempVec3.distanceTo(new THREE.Vector3(i, i, i));
       
       // Warm up math operations
       const angle = Math.atan2(i, i);
-      const sin = Math.sin(angle);
-      const cos = Math.cos(angle);
+      Math.sin(angle);
+      Math.cos(angle);
       
       // Warm up array operations
       tempProjectiles.push(new THREE.Mesh());
@@ -567,7 +573,7 @@ export class Game {
         Endless Boss Rush
       </p>
       <div style="margin-bottom: 2em;">
-        <p style="font-size: 1.2em; margin: 0.5em;">Press <span style="color: #00ff00;">ENTER</span> to Start</p>
+        <p style="font-size: 1.2em; margin: 0.5em;">Press <span style="color: #00ff00;">ENTER</span> to Select Arena</p>
         <p style="font-size: 1em; margin: 0.5em; color: #888;">
           WASD/Arrows: Move | Space: Shoot | Shift: Dash | ESC: Pause
         </p>
@@ -663,6 +669,18 @@ export class Game {
     `;
     document.body.appendChild(this.announcementDiv);
     
+    // Initialize Map Selection Screen
+    this.mapSelectionScreen = new MapSelectionScreen();
+    this.mapSelectionScreen.setOnArenaSelected((selectedArena: Arena) => {
+      // Get the arena name and dispose the dummy arena
+      const arenaName = selectedArena.getName();
+      selectedArena.dispose();
+      this.startGameWithArena(arenaName);
+    });
+    this.mapSelectionScreen.setOnBackToMenu(() => {
+      this.showMainMenu();
+    });
+    
     console.log('🎮 UI elements pre-created');
     
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -677,7 +695,7 @@ export class Game {
     const keydownHandler = (e: Event) => {
       const keyEvent = e as KeyboardEvent;
       if (keyEvent.key === 'Enter' && this.gameState === GameState.MENU) {
-        this.startGame();
+        this.showMapSelection();
       } else if (keyEvent.key === 'Escape') {
         if (this.gameState === GameState.PLAYING) {
           this.pauseGame();
@@ -745,85 +763,7 @@ export class Game {
 
   }
 
-  private startGame(): void {
-    // Hide menu
-    if (this.menuContainer) {
-      this.menuContainer.style.display = 'none';
-    }
-    
-    // Hide loading screen if still visible
-    const loadingScreen = document.getElementById('loading-screen');
-    if (loadingScreen) {
-      loadingScreen.style.display = 'none';
-    }
-
-    // Keep fullscreen button visible during gameplay
-    const fullscreenBtn = document.getElementById('fullscreen-btn');
-    if (fullscreenBtn) {
-      fullscreenBtn.style.display = 'block';
-      fullscreenBtn.style.zIndex = '2000'; // Ensure it's above game UI
-    }
-
-    // Clean up existing game entities before creating new ones
-    if (this.gameUI) {
-      this.gameUI.dispose();
-      this.gameUI = null;
-    }
-    
-    if (this.player) {
-      this.player.dispose();
-      this.player = null;
-    }
-    
-    if (this.boss) {
-      this.boss.dispose();
-      this.boss = null;
-    }
-    
-    if (this.arena) {
-      this.arena.dispose();
-      this.arena = null;
-    }
-    
-    // Clear minions
-    for (const minion of this.minions) {
-      minion.dispose();
-    }
-    this.minions = [];
-    
-    // Clear projectiles
-    for (const projectile of this.projectiles) {
-      this.disposeProjectile(projectile);
-      this.scene.remove(projectile);
-    }
-    this.projectiles = [];
-
-    this.gameState = GameState.PLAYING;
-    this.score = 0;
-    this.bossLevel = 1;
-    this.comboMultiplier = 1;
-    this.lastMinionSpawnTime = Date.now();
-    
-    // Initialize UI first (lightweight)
-    this.inventory = new Inventory();
-    this.gameUI = new GameUI();
-    this.performanceMonitor = new PerformanceMonitor();
-    
-    // Initialize combo display to show x1
-    if (this.gameUI) {
-      this.gameUI.updateCombo(this.comboMultiplier);
-    }
-
-    // Create entities immediately since shaders are already compiled
-    this.arena = new SpaceArena(this.scene);
-    this.player = new Player(this.scene);
-    this.boss = new SimpleBoss(this.scene, this.bossLevel);
-    
-    // Setup inventory hotkey usage listener
-    this.setupInventoryListener();
-    
-    console.log('🎮 Game started!');
-  }
+  // startGame method removed - deprecated, use showMapSelection() -> startGameWithArena() instead
 
 
   private pauseGame(): void {
@@ -977,9 +917,130 @@ export class Game {
       this.scene.remove(this.scene.children[0]);
     }
 
-    // Directly start a new game instead of going to menu
-    // This keeps all cached resources active
-    this.startGame();
+    // Show map selection for arena choice
+    this.showMapSelection();
+  }
+
+  private showMapSelection(): void {
+    // Hide menu
+    if (this.menuContainer) {
+      this.menuContainer.style.display = 'none';
+    }
+    
+    // Show map selection screen
+    if (this.mapSelectionScreen) {
+      this.mapSelectionScreen.show();
+    }
+  }
+
+  private startGameWithArena(arenaName: string): void {
+    // Hide loading screen if still visible
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) {
+      loadingScreen.style.display = 'none';
+    }
+
+    // Keep fullscreen button visible during gameplay
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    if (fullscreenBtn) {
+      fullscreenBtn.style.display = 'block';
+      fullscreenBtn.style.zIndex = '2000'; // Ensure it's above game UI
+    }
+
+    // Clean up existing game entities before creating new ones
+    if (this.gameUI) {
+      this.gameUI.dispose();
+      this.gameUI = null;
+    }
+    
+    if (this.player) {
+      this.player.dispose();
+      this.player = null;
+    }
+    
+    if (this.boss) {
+      this.boss.dispose();
+      this.boss = null;
+    }
+    
+    if (this.arena) {
+      this.arena.dispose();
+      this.arena = null;
+    }
+    
+    // Clear minions
+    for (const minion of this.minions) {
+      minion.dispose();
+    }
+    this.minions = [];
+    
+    // Clear projectiles
+    for (const projectile of this.projectiles) {
+      this.disposeProjectile(projectile);
+      this.scene.remove(projectile);
+    }
+    this.projectiles = [];
+
+    this.gameState = GameState.PLAYING;
+    this.score = 0;
+    this.bossLevel = 1;
+    this.comboMultiplier = 1;
+    this.lastMinionSpawnTime = Date.now();
+    
+    // Initialize UI first (lightweight)
+    this.inventory = new Inventory();
+    this.gameUI = new GameUI();
+    this.performanceMonitor = new PerformanceMonitor();
+    
+    // Initialize combo display to show x1
+    if (this.gameUI) {
+      this.gameUI.updateCombo(this.comboMultiplier);
+    }
+
+    // Create arena based on selection
+    switch (arenaName) {
+      case 'Monad Ecosystem':
+        this.arena = new MonadEcosystemArena(this.scene);
+        break;
+      case 'Space Arena':
+        this.arena = new SpaceArena(this.scene);
+        break;
+      case 'Asteroid Field':
+        this.arena = new AsteroidFieldArena(this.scene);
+        // Set up falling asteroid damage callback
+        if (this.arena instanceof AsteroidFieldArena) {
+          this.arena.setPlayerCollisionCallback((damage: number) => {
+            if (this.player) {
+              this.player.takeDamage(damage);
+              console.log(`⚠️ Player hit by falling asteroid! ${damage} damage!`);
+            }
+          });
+        }
+        break;
+      case 'Nebula Zone':
+        this.arena = new NebulaZoneArena(this.scene);
+        break;
+      default:
+        // Fallback to Monad Ecosystem
+        this.arena = new MonadEcosystemArena(this.scene);
+        break;
+    }
+
+    // Initialize the arena
+    this.arena.initialize();
+
+    // Create player
+    this.player = new Player(this.scene);
+    
+    // Only create boss and enemies for combat arenas (not Monad Ecosystem)
+    if (arenaName !== 'Monad Ecosystem') {
+      this.boss = new SimpleBoss(this.scene, this.bossLevel);
+    }
+    
+    // Setup inventory hotkey usage listener
+    this.setupInventoryListener();
+    
+    console.log(`🎮 Game started with ${arenaName}!`);
   }
 
   public async start(): Promise<void> {
@@ -1105,6 +1166,12 @@ export class Game {
     if (this.inventory) {
       // Inventory should have dispose method
       this.inventory = null;
+    }
+
+    // Dispose map selection screen
+    if (this.mapSelectionScreen) {
+      this.mapSelectionScreen.dispose();
+      this.mapSelectionScreen = null;
     }
 
     // Dispose item drops
@@ -1254,6 +1321,11 @@ export class Game {
       // Update player with camera for camera-relative movement
       if (this.player && this.arena) {
         this.player.update(modifiedDeltaTime, this.arena.getBounds(), this.camera, this.inputManager);
+        
+        // Update asteroid field arena with player position for collision detection
+        if (this.arena instanceof AsteroidFieldArena) {
+          this.arena.updatePlayerPosition(this.player.position);
+        }
 
         // Handle shooting with projectile limits
         const projectiles = this.player.shoot(this.inputManager);
@@ -1284,8 +1356,11 @@ export class Game {
         }
       }
 
+      // Only update boss and spawn minions if not in Monad Ecosystem (practice arena)
+      const isMonadEcosystem = this.arena instanceof MonadEcosystemArena;
+      
       // Update boss
-      if (this.boss && this.player && this.arena) {
+      if (this.boss && this.player && this.arena && !isMonadEcosystem) {
         this.boss.update(modifiedDeltaTime, this.player.position, this.arena.getBounds());
 
         // Boss attacks with projectile limits
@@ -1314,13 +1389,15 @@ export class Game {
         }
       }
 
-      // Spawn minions every 15 seconds (8 seconds after level 5)
-      const currentTime = Date.now();
-      // Adjust spawn interval based on boss level
-      const spawnInterval = this.bossLevel >= 5 ? 8000 : 15000;
-      if (currentTime - this.lastMinionSpawnTime >= spawnInterval) {
-        this.spawnMinion();
-        this.lastMinionSpawnTime = currentTime;
+      // Spawn minions every 15 seconds (8 seconds after level 5) - but not in Monad Ecosystem
+      if (!isMonadEcosystem) {
+        const currentTime = Date.now();
+        // Adjust spawn interval based on boss level
+        const spawnInterval = this.bossLevel >= 5 ? 8000 : 15000;
+        if (currentTime - this.lastMinionSpawnTime >= spawnInterval) {
+          this.spawnMinion();
+          this.lastMinionSpawnTime = currentTime;
+        }
       }
 
       // Update minions
@@ -1377,7 +1454,10 @@ export class Game {
       // Update Game UI
       if (this.gameUI && this.player && this.inventory) {
         this.gameUI.updateHealth(this.player);
-        this.gameUI.updateBossHealth(this.boss);
+        // Only update boss health if boss exists
+        if (this.boss) {
+          this.gameUI.updateBossHealth(this.boss);
+        }
         this.gameUI.updateScore(this.score);
         this.gameUI.updateWave(this.bossLevel);
         this.gameUI.updateCombo(this.comboMultiplier);

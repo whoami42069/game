@@ -138,7 +138,7 @@ export class Minion {
         this.mesh.add(this.particleSystem);
     }
 
-    public update(playerPosition: THREE.Vector3, deltaTime: number): THREE.Mesh[] | null {
+    public update(playerPosition: THREE.Vector3, _deltaTime: number): THREE.Mesh[] | null {
         if (this.isDead) return null;
         
         const currentTime = Date.now();
