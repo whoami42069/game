@@ -1109,10 +1109,11 @@ export class Game {
       this.gameOverScreen.style.display = 'block';
     }
     
-    // Hide menu button during game over
+    // Keep menu button visible during game over (player is still in arena)
     const menuBtn = document.getElementById('menu-btn');
     if (menuBtn) {
-      menuBtn.style.display = 'none';
+      menuBtn.style.display = 'block';
+      menuBtn.style.zIndex = '2001';
     }
   }
 
