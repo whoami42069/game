@@ -75,6 +75,13 @@ export class HighScoreManager {
     const gameAddress = import.meta.env.VITE_GAME_ADDRESS;
     const rpcUrl = import.meta.env.VITE_RPC_URL || monadTestnet.rpcUrls.default.http[0];
     
+    // Debug: Show actual values (masked for security)
+    console.log('📊 Environment variables check:');
+    console.log('  VITE_GAME_CONTRACT_ADDRESS =', contractAddress ? `${contractAddress.slice(0, 10)}...` : 'undefined');
+    console.log('  VITE_GAME_ADDRESS =', gameAddress ? `${gameAddress.slice(0, 10)}...` : 'undefined');
+    console.log('  VITE_WALLET_PRIVATE_KEY =', privateKey ? 'SET (hidden)' : 'undefined');
+    console.log('  VITE_RPC_URL =', import.meta.env.VITE_RPC_URL || 'using default');
+    
     console.log('🎮 Game Contract:', contractAddress || 'NOT CONFIGURED');
     console.log('🎯 Game Address:', gameAddress || 'NOT CONFIGURED');
     console.log('🌐 RPC URL:', rpcUrl);
