@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { Billboard3D, BillboardConfig } from './Billboard3D';
+import { priceManager } from './PriceManager';
 
 /**
- * Interface for Switchboard BTC price response
+ * Interface for BTC price response
  */
-interface SwitchboardPriceData {
+interface PriceData {
   price?: number;
   lastUpdate?: string;
 }
@@ -27,18 +28,18 @@ export class BillboardManager {
    * Initialize all billboards for the arena
    */
   public initialize(): void {
-    this.createSwitchboardBillboard();
+    this.createCryptoBillboard();
     this.createMonadBillboard();
-    console.log('🏮 Billboard Manager initialized with futuristic SWITCHBOARD and MONAD billboards');
+    console.log('🏮 Billboard Manager initialized with futuristic CRYPTO and MONAD billboards');
     
     // Start automatic price updates every 15 seconds
     this.startPriceUpdates();
   }
 
   /**
-   * Create the SWITCHBOARD billboard with futuristic purple to blue gradient
+   * Create the CRYPTO billboard with futuristic purple to blue gradient
    */
-  private createSwitchboardBillboard(): void {
+  private createCryptoBillboard(): void {
     const config: BillboardConfig = {
       text: 'SWITCHBOARD',
       width: 40,
@@ -61,10 +62,10 @@ export class BillboardManager {
       glitchIntensity: 0.002  // Occasional glitch effect
     };
 
-    const switchboardBillboard = new Billboard3D(config);
+    const cryptoBillboard = new Billboard3D(config);
     
     // Set up BTC price fetching
-    switchboardBillboard.setUpdateCallback(async () => {
+    cryptoBillboard.setUpdateCallback(async () => {
       try {
         const priceData = await this.fetchBTCPrice();
         return {
@@ -87,13 +88,13 @@ export class BillboardManager {
     });
 
     // Add initial content with placeholder price
-    switchboardBillboard.updateContent({
+    cryptoBillboard.updateContent({
       primaryText: 'SWITCHBOARD',
       secondaryText: 'BTC: Loading...'
     });
 
-    this.billboards.set('switchboard', switchboardBillboard);
-    this.scene.add(switchboardBillboard.getGroup());
+    this.billboards.set('crypto', cryptoBillboard);
+    this.scene.add(cryptoBillboard.getGroup());
   }
 
   /**
@@ -144,87 +145,22 @@ export class BillboardManager {
   }
 
   /**
-   * Fetch BTC/USD price - try Switchboard first, then fallback to working API
+   * Fetch BTC/USD price from CoinGecko
    */
-  private async fetchBTCPrice(): Promise<SwitchboardPriceData> {
-    // First, try Switchboard endpoints
-    const switchboardEndpoints = [
-      'https://api.switchboard.xyz/api/v1/aggregator/f01cc150052ba08171863e5920bdce7433e200eb31a8558521b0015a09867630',
-      'https://api.switchboard.xyz/api/data/feed/f01cc150052ba08171863e5920bdce7433e200eb31a8558521b0015a09867630',
-      'https://switchboard-api.herokuapp.com/api/feed/btc-usd',
-      'https://api.switchboard.xyz/feed/btc-usd'
-    ];
-    
-    // Try each Switchboard endpoint
-    for (const endpoint of switchboardEndpoints) {
-      try {
-        console.log(`Trying Switchboard endpoint: ${endpoint}`);
-        
-        const response = await fetch(endpoint, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-          },
-          signal: AbortSignal.timeout(3000) // 3 second timeout
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          console.log('Switchboard API response:', data);
-          
-          // Parse various possible response structures
-          let price: number | undefined;
-          
-          if (data && typeof data.result === 'number') {
-            price = data.result;
-          } else if (data && typeof data.value === 'number') {
-            price = data.value;
-          } else if (data && typeof data.latest_result === 'number') {
-            price = data.latest_result;
-          } else if (data && typeof data.price === 'number') {
-            price = data.price;
-          } else if (data && data.data && typeof data.data.result === 'number') {
-            price = data.data.result;
-          } else if (data && data.data && typeof data.data.value === 'number') {
-            price = data.data.value;
-          }
-          
-          if (price !== undefined) {
-            console.log(`✅ Successfully fetched BTC price from Switchboard: $${price}`);
-            return {
-              price,
-              lastUpdate: new Date().toISOString()
-            };
-          }
-        }
-      } catch (error) {
-        console.warn(`Switchboard endpoint failed: ${endpoint}`);
-      }
-    }
-    
-    // If Switchboard fails, use CoinGecko as fallback
-    console.log('Switchboard unavailable, using CoinGecko fallback...');
+  private async fetchBTCPrice(): Promise<PriceData> {
+    // Use our PriceManager to get Bitcoin price from CoinGecko
     try {
-      const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd', {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
-        signal: AbortSignal.timeout(5000)
-      });
+      const priceData = await priceManager.getPrice('bitcoin');
       
-      if (response.ok) {
-        const data = await response.json();
-        if (data && data.bitcoin && data.bitcoin.usd) {
-          console.log(`✅ Successfully fetched BTC price from CoinGecko: $${data.bitcoin.usd}`);
-          return {
-            price: data.bitcoin.usd,
-            lastUpdate: new Date().toISOString()
-          };
-        }
+      if (priceData && priceData.bitcoin) {
+        console.log(`✅ Successfully fetched BTC price from CoinGecko: $${priceData.bitcoin.usd}`);
+        return {
+          price: priceData.bitcoin.usd,
+          lastUpdate: new Date().toISOString()
+        };
       }
     } catch (error) {
-      console.error('CoinGecko fallback also failed:', error);
+      console.error('Failed to fetch BTC price from CoinGecko:', error);
     }
     
     // If we have a previous price, keep showing it
@@ -251,10 +187,10 @@ export class BillboardManager {
 
 
   /**
-   * Manually update SWITCHBOARD with new price data
+   * Manually update CRYPTO billboard with new price data
    */
-  public async updateSwitchboardPrice(): Promise<void> {
-    const billboard = this.billboards.get('switchboard');
+  public async updateCryptoPrice(): Promise<void> {
+    const billboard = this.billboards.get('crypto');
     if (billboard) {
       try {
         const priceData = await this.fetchBTCPrice();
@@ -267,7 +203,7 @@ export class BillboardManager {
         });
         this.currentPrice = priceData.price || 0;
       } catch (error) {
-        console.error('Failed to update SWITCHBOARD price:', error);
+        console.error('Failed to update CRYPTO price:', error);
         billboard.updateContent({
           secondaryText: 'BTC: Connection Error'
         });
@@ -283,11 +219,11 @@ export class BillboardManager {
    */
   private startPriceUpdates(): void {
     // Initial update
-    this.updateSwitchboardPrice().catch(console.error);
+    this.updateCryptoPrice().catch(console.error);
     
     // Set up interval for updates every 15 seconds
     this.updateTimer = setInterval(() => {
-      this.updateSwitchboardPrice().catch(console.error);
+      this.updateCryptoPrice().catch(console.error);
     }, this.priceUpdateInterval);
     
     console.log('📊 Started automatic BTC price updates every 15 seconds');
@@ -302,6 +238,11 @@ export class BillboardManager {
       this.updateTimer = null;
       console.log('📊 Stopped automatic BTC price updates');
     }
+  }
+  
+  // Add compatibility alias for old method name
+  public async updateSwitchboardPrice(): Promise<void> {
+    return this.updateCryptoPrice();
   }
   
   /**

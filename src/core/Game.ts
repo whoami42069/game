@@ -552,6 +552,63 @@ export class Game {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   }
   
+  private async loadHighScoreForWallet(): Promise<void> {
+    if (!this.walletAddress) return;
+    
+    try {
+      const { highScoreManager } = await import('./HighScoreManager');
+      await highScoreManager.initialize(this.walletAddress);
+      const highScore = highScoreManager.getHighScore();
+      
+      // Update the high score display in menu
+      const highScoreElement = document.getElementById('menu-high-score');
+      if (highScoreElement) {
+        highScoreElement.textContent = highScoreManager.formatScore(highScore);
+      }
+    } catch (error) {
+      console.error('Failed to load high score:', error);
+    }
+  }
+  
+  private async loadLeaderboard(): Promise<void> {
+    try {
+      const { leaderboardManager } = await import('./LeaderboardManager');
+      const leaderboardContent = document.getElementById('leaderboard-content');
+      
+      if (leaderboardContent) {
+        // Get the leaderboard HTML
+        const html = leaderboardManager.getLeaderboardHTML();
+        leaderboardContent.innerHTML = html;
+        
+        // If user is connected, highlight their entry
+        if (this.walletAddress) {
+          const rank = leaderboardManager.getRank(this.walletAddress);
+          if (rank > 0) {
+            // Add a note about user's rank if they're on the leaderboard
+            const userRankDiv = document.createElement('div');
+            userRankDiv.style.cssText = `
+              margin-top: 1rem;
+              padding: 0.5rem;
+              background: rgba(0, 255, 136, 0.1);
+              border-radius: 4px;
+              text-align: center;
+              color: #00ff88;
+              font-size: 0.9rem;
+            `;
+            userRankDiv.textContent = `Your Rank: #${rank}`;
+            leaderboardContent.appendChild(userRankDiv);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load leaderboard:', error);
+      const leaderboardContent = document.getElementById('leaderboard-content');
+      if (leaderboardContent) {
+        leaderboardContent.innerHTML = '<div style="color: #ff6666; text-align: center;">Failed to load leaderboard</div>';
+      }
+    }
+  }
+  
   private async asyncPreCreateUIElements(): Promise<void> {
     // Pre-create all UI elements to avoid DOM manipulation during gameplay
     
@@ -600,15 +657,28 @@ export class Game {
           </div>
         </div>
         
-        <!-- Info panel -->
-        <div class="info-section menu-card">
-          <h3 class="info-title">Mission Brief</h3>
-          <p class="info-text">
-            Navigate through endless waves of evolved AI bosses in deep space.
-          </p>
-          <p class="info-subtext">
-            Each victory evolves your enemies. Survive as long as you can.
-          </p>
+        <!-- Info panel with Leaderboard -->
+        <div class="info-section">
+          <!-- Leaderboard panel -->
+          <div class="menu-card" style="margin-bottom: 1rem;">
+            <h3 class="info-title" style="color: #FFD700; margin-bottom: 1rem;">🏆 Global Leaderboard</h3>
+            <div id="leaderboard-content" style="font-family: 'Rajdhani', sans-serif; max-height: 250px; overflow-y: auto;">
+              <div style="color: #7A8B99; text-align: center; padding: 1rem;">
+                Loading scores...
+              </div>
+            </div>
+          </div>
+          
+          <!-- Mission Brief panel -->
+          <div class="menu-card">
+            <h3 class="info-title">Mission Brief</h3>
+            <p class="info-text" style="font-size: 0.9rem;">
+              Navigate through endless waves of evolved AI bosses in deep space.
+            </p>
+            <p class="info-subtext" style="font-size: 0.85rem;">
+              Each victory evolves your enemies. Survive as long as you can.
+            </p>
+          </div>
         </div>
         
         <!-- Controls panel -->
@@ -891,6 +961,15 @@ export class Game {
     };
     document.addEventListener('visibilitychange', visibilityHandler);
     this.eventListeners.push({ target: document, type: 'visibilitychange', listener: visibilityHandler });
+    
+    // Handle menu button event
+    const menuButtonHandler = () => {
+      if (this.gameState === GameState.PLAYING) {
+        this.returnToMapSelection();
+      }
+    };
+    window.addEventListener('returnToMapSelection', menuButtonHandler);
+    this.eventListeners.push({ target: window, type: 'returnToMapSelection', listener: menuButtonHandler });
   }
 
   private onWindowResize(): void {
@@ -932,11 +1011,17 @@ export class Game {
         if (walletText) walletText.textContent = shortAddress + ' (Connected)';
         if (walletBtn) walletBtn.style.display = 'none';
         if (startBtn) startBtn.style.display = 'block';
+        
+        // Load high score for connected wallet
+        this.loadHighScoreForWallet();
       } else {
         if (walletText) walletText.textContent = 'Connect Wallet';
         if (walletBtn) walletBtn.style.display = 'block';
         if (startBtn) startBtn.style.display = 'none';
       }
+      
+      // Load and display leaderboard
+      this.loadLeaderboard();
     }
     
     // Ensure fullscreen button is visible
@@ -944,6 +1029,12 @@ export class Game {
     if (fullscreenBtn) {
       fullscreenBtn.style.display = 'block';
       fullscreenBtn.style.zIndex = '2000';
+    }
+    
+    // Hide menu button in main menu
+    const menuBtn = document.getElementById('menu-btn');
+    if (menuBtn) {
+      menuBtn.style.display = 'none';
     }
 
   }
@@ -971,26 +1062,76 @@ export class Game {
     this.clock.start();
   }
 
-  private gameOver(): void {
+  private async gameOver(): Promise<void> {
     this.gameState = GameState.GAME_OVER;
+    
+    // Import and initialize high score manager
+    const finalScore = Math.round(this.score);
+    let isNewHighScore = false;
+    let highScoreText = '';
+    
+    try {
+      const { highScoreManager } = await import('./HighScoreManager');
+      
+      // Initialize with wallet address if connected
+      if (this.walletAddress) {
+        await highScoreManager.initialize(this.walletAddress);
+        
+        // Check if this is a new high score
+        isNewHighScore = highScoreManager.isNewHighScore(finalScore);
+        const currentHighScore = highScoreManager.getHighScore();
+        
+        // Always submit score to blockchain on game over
+        console.log('Submitting final score to blockchain:', finalScore);
+        await highScoreManager.submitScore(finalScore);
+        
+        if (isNewHighScore) {
+          highScoreText = `<p style="font-size: 1.3em; color: #00ff88; animation: pulse 2s infinite;">🏆 NEW HIGH SCORE! 🏆</p>`;
+        } else {
+          highScoreText = `<p style="font-size: 1em; color: #88ff88;">High Score: ${highScoreManager.formatScore(currentHighScore)}</p>`;
+        }
+      }
+    } catch (error) {
+      console.error('High score system error:', error);
+    }
 
     // Update and show pre-created game over screen
     if (this.gameOverScreen) {
       this.gameOverScreen.innerHTML = `
         <h1 style="font-size: 3em; margin-bottom: 0.5em;">GAME OVER</h1>
-        <p style="font-size: 1.5em; color: #ffff00;">Final Score: ${Math.round(this.score)}</p>
+        <p style="font-size: 1.5em; color: #ffff00;">Final Score: ${finalScore}</p>
+        ${highScoreText}
         <p style="font-size: 1.2em; color: #ff00ff;">Boss Level Reached: ${this.bossLevel}</p>
+        ${isNewHighScore ? '<p style="font-size: 0.9em; color: #8888ff;">Score saved to blockchain!</p>' : ''}
         <p style="margin-top: 2em;">Press R to Restart</p>
         <p style="margin-top: 0.5em;">Press M for Map Selection</p>
       `;
       this.gameOverScreen.style.display = 'block';
     }
+    
+    // Hide menu button during game over
+    const menuBtn = document.getElementById('menu-btn');
+    if (menuBtn) {
+      menuBtn.style.display = 'none';
+    }
   }
 
-  private victory(): void {
+  private async victory(): Promise<void> {
     // Boss defeated, evolve and continue
     this.bossLevel++;
     this.score += 100; // Wave clear bonus: 100 points
+
+    // Submit current score to blockchain/leaderboard after each wave
+    if (this.walletAddress) {
+      try {
+        const { highScoreManager } = await import('./HighScoreManager');
+        await highScoreManager.initialize(this.walletAddress);
+        await highScoreManager.submitScore(Math.round(this.score));
+        console.log('Score submitted after wave completion:', this.score);
+      } catch (error) {
+        console.error('Failed to submit score after wave:', error);
+      }
+    }
 
     // Drop items visually on boss defeat
     if (this.boss) {
@@ -1107,6 +1248,65 @@ export class Game {
     this.showMapSelection();
   }
 
+  public returnToMapSelection(): void {
+    // Stop current game
+    this.gameState = GameState.MENU;
+    
+    // Hide menu button
+    const menuBtn = document.getElementById('menu-btn');
+    if (menuBtn) {
+      menuBtn.style.display = 'none';
+    }
+
+    // Clean up game entities
+    if (this.gameUI) {
+      this.gameUI.dispose();
+      this.gameUI = null;
+    }
+    
+    if (this.player) {
+      this.player.dispose();
+      this.player = null;
+    }
+    
+    if (this.boss) {
+      this.boss.dispose();
+      this.boss = null;
+    }
+    
+    if (this.arena) {
+      this.arena.dispose();
+      this.arena = null;
+    }
+    
+    // Clear minions
+    for (const minion of this.minions) {
+      minion.dispose();
+    }
+    this.minions = [];
+    
+    // Clear projectiles
+    for (const projectile of this.projectiles) {
+      this.disposeProjectile(projectile);
+      this.scene.remove(projectile);
+    }
+    this.projectiles = [];
+    
+    // Clear item drops
+    for (const drop of this.itemDrops) {
+      drop.dispose();
+    }
+    this.itemDrops = [];
+
+    // Clear scene
+    while (this.scene.children.length > 0) {
+      this.scene.remove(this.scene.children[0]);
+    }
+
+    // Show map selection screen
+    this.showMapSelection();
+  }
+
   private restartWithSameArena(): void {
     // Hide game over screen
     if (this.gameOverScreen) {
@@ -1125,7 +1325,7 @@ export class Game {
       this.scene.remove(this.scene.children[0]);
     }
 
-    // Restart with the same arena
+    // Restart with the same arena (startGameWithArena will show the menu button)
     this.startGameWithArena(this.currentArenaName);
   }
 
@@ -1159,6 +1359,13 @@ export class Game {
     if (fullscreenBtn) {
       fullscreenBtn.style.display = 'block';
       fullscreenBtn.style.zIndex = '2000'; // Ensure it's above game UI
+    }
+    
+    // Show menu button during gameplay
+    const menuBtn = document.getElementById('menu-btn');
+    if (menuBtn) {
+      menuBtn.style.display = 'block';
+      menuBtn.style.zIndex = '2001'; // Ensure it's above game UI and same level as fullscreen
     }
 
     // Clean up existing game entities before creating new ones

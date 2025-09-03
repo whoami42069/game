@@ -1,15 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
-import { PrivyProvider, usePrivy, type CrossAppAccountWithMetadata } from '@privy-io/react-auth';
+import { PrivyProvider, usePrivy, useWallets, type CrossAppAccountWithMetadata } from '@privy-io/react-auth';
 
 // Wallet connection component
 function WalletConnector({ onConnect }: { onConnect: (address: string) => void }) {
   const { ready, authenticated, user, login, logout } = usePrivy();
+  const { wallets } = useWallets();
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   
   useEffect(() => {
     if (authenticated && user) {
       console.log('Privy user authenticated:', user);
+      
+      // Set up wallet provider for transactions
+      if (wallets && wallets.length > 0) {
+        const wallet = wallets[0];
+        // Check if wallet has getEthereumProvider method (for embedded wallets)
+        if ('getEthereumProvider' in wallet) {
+          (wallet as any).getEthereumProvider().then((provider: any) => {
+            (window as any).privyProvider = provider;
+            console.log('Privy provider set for transactions');
+          }).catch((err: any) => {
+            console.error('Failed to get Privy provider:', err);
+          });
+        }
+      }
       
       // Check for Cross-App account with Monad Games ID
       if (user.linkedAccounts) {
@@ -53,7 +68,7 @@ function WalletConnector({ onConnect }: { onConnect: (address: string) => void }
         }, 1000);
       }
     }
-  }, [authenticated, user, onConnect]);
+  }, [authenticated, user, wallets, onConnect]);
   
   const handleConnect = async () => {
     if (!ready) return;

@@ -140,6 +140,15 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+  
+  // Handle menu button (return to arena selection)
+  const menuBtn = document.getElementById('menu-btn');
+  if (menuBtn) {
+    menuBtn.addEventListener('click', () => {
+      // Dispatch custom event that Game.ts will listen for
+      window.dispatchEvent(new CustomEvent('returnToMapSelection'));
+    });
+  }
 });
 
 // Handle window resize

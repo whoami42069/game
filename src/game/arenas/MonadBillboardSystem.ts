@@ -25,8 +25,8 @@ export class MonadBillboardSystem {
       position: new THREE.Vector3(60, 10, 0)   // Right side
     },
     {
-      url: 'https://explorer.switchboardlabs.xyz/',
-      title: 'Switchboard Explorer',
+      url: 'https://www.coingecko.com/',
+      title: 'CoinGecko',
       position: new THREE.Vector3(0, 10, -60)  // Back
     },
     {
