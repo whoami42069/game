@@ -37,7 +37,7 @@ export class NebulaZoneArena extends Arena {
 
   constructor(scene: THREE.Scene) {
     const config: ArenaConfig = {
-      name: 'Nebula Zone Arena',
+      name: 'Nebula Zone',
       platformSize: 35,
       bounds: {
         min: new THREE.Vector3(-33, 0, -33),

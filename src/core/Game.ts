@@ -20,6 +20,7 @@ import { PostProcessingManager } from './PostProcessingManager';
 import { CombatFeedbackManager } from './CombatFeedbackManager';
 import { PerformanceMonitor } from './PerformanceUtils';
 import { TextureManager } from './TextureManager';
+import { getUIAudioManager, UIAudioManager } from './UIAudioManager';
 
 
 export interface GameConfig {
@@ -62,6 +63,7 @@ export class Game {
   private uiManager: UIManager;
   private postProcessingManager: PostProcessingManager | null = null;
   private combatFeedbackManager: CombatFeedbackManager | null = null;
+  private uiAudioManager: UIAudioManager;
 
   private isRunning: boolean = false;
   private animationId: number | null = null;
@@ -111,6 +113,7 @@ export class Game {
   private flashDiv: HTMLDivElement | null = null;
   private announcementDiv: HTMLDivElement | null = null;
   private mapSelectionScreen: MapSelectionScreen | null = null;
+  private currentArenaName: string = 'Space Arena'; // Store current arena for restart
 
   // Track safe timer/interval wrappers
   private safeSetTimeout(callback: () => void, delay: number): number {
@@ -149,6 +152,7 @@ export class Game {
     this.audioManager = config.audioManager;
     this.inputManager = config.inputManager;
     this.uiManager = config.uiManager;
+    this.uiAudioManager = getUIAudioManager();
 
     this.clock = new THREE.Clock();
     this.stats = new Stats();
@@ -538,6 +542,12 @@ export class Game {
   
   // Removed - now part of precompileShaders
   
+  private formatPlayTime(seconds: number): string {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  }
+  
   private async asyncPreCreateUIElements(): Promise<void> {
     // Pre-create all UI elements to avoid DOM manipulation during gameplay
     
@@ -551,36 +561,87 @@ export class Game {
     const existingGameOver = document.getElementById('game-over');
     if (existingGameOver) existingGameOver.remove();
     
-    // Main menu
+    // Main menu with professional design
     this.menuContainer = document.createElement('div');
     this.menuContainer.id = 'main-menu';
-    this.menuContainer.style.cssText = `
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      text-align: center;
-      color: #00ffff;
-      font-family: 'Courier New', monospace;
-      z-index: 1000;
-      display: none;
-    `;
+    this.menuContainer.style.display = 'none';
     this.menuContainer.innerHTML = `
-      <h1 style="font-size: 4em; margin-bottom: 0.5em; text-shadow: 0 0 30px #00ffff; animation: glow 2s ease-in-out infinite;">
-        NEXUS ETERNAL
-      </h1>
-      <p style="font-size: 1.5em; color: #ff00ff; margin-bottom: 2em;">
-        Endless Boss Rush
-      </p>
-      <div style="margin-bottom: 2em;">
-        <p style="font-size: 1.2em; margin: 0.5em;">Press <span style="color: #00ff00;">ENTER</span> to Select Arena</p>
-        <p style="font-size: 1em; margin: 0.5em; color: #888;">
-          WASD/Arrows: Move | Space: Shoot | Shift: Dash | ESC: Pause
-        </p>
-      </div>
-      <div style="font-size: 0.9em; color: #666;">
-        <p>Defeat endless waves of bosses</p>
-        <p>Each victory makes the next boss stronger</p>
+      <!-- Background effects -->
+      <div class="menu-bg-layer particle-layer"></div>
+      <div class="menu-bg-layer scan-lines"></div>
+      <div class="menu-glow-orb orb-cyan"></div>
+      <div class="menu-glow-orb orb-orange"></div>
+      <div class="holographic-overlay"></div>
+      
+      <!-- Main grid layout -->
+      <div class="menu-grid">
+        <!-- Title section -->
+        <div class="title-section">
+          <h1 class="title-hero">
+            NEXUS
+            <span class="title-accent">ETERNAL</span>
+          </h1>
+          <p class="title-subtitle">Endless Boss Rush</p>
+        </div>
+        
+        <!-- Center content -->
+        <div class="menu-content">
+          <div class="cta-container">
+            <button class="cta-primary" id="start-game-btn">
+              Press <span class="key-highlight">ENTER</span> to Select Arena
+            </button>
+          </div>
+        </div>
+        
+        <!-- Info panel -->
+        <div class="info-section menu-card">
+          <h3 class="info-title">Mission Brief</h3>
+          <p class="info-text">
+            Navigate through endless waves of evolved AI bosses in deep space.
+          </p>
+          <p class="info-subtext">
+            Each victory evolves your enemies. Survive as long as you can.
+          </p>
+        </div>
+        
+        <!-- Controls panel -->
+        <div class="controls-section menu-card">
+          <h3 class="controls-title">Control Systems</h3>
+          <div class="controls-grid">
+            <div class="control-item">
+              <span class="key-combo">WASD</span>
+              <span class="control-desc">Navigate</span>
+            </div>
+            <div class="control-item">
+              <span class="key-combo">SPACE</span>
+              <span class="control-desc">Fire Weapons</span>
+            </div>
+            <div class="control-item">
+              <span class="key-combo">SHIFT</span>
+              <span class="control-desc">Boost Dash</span>
+            </div>
+            <div class="control-item">
+              <span class="key-combo">ESC</span>
+              <span class="control-desc">Pause</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Stats bar -->
+        <div class="stats-bar">
+          <div class="stat-item">
+            <span class="stat-value" id="menu-high-score">${localStorage.getItem('highScore') || '0'}</span>
+            <span class="stat-label">High Score</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value" id="menu-bosses-defeated">${localStorage.getItem('totalBosses') || '0'}</span>
+            <span class="stat-label">Bosses Defeated</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value" id="menu-play-time">${this.formatPlayTime(parseInt(localStorage.getItem('totalPlayTime') || '0'))}</span>
+            <span class="stat-label">Play Time</span>
+          </div>
+        </div>
       </div>
     `;
     document.body.appendChild(this.menuContainer);
@@ -691,6 +752,41 @@ export class Game {
     window.addEventListener('resize', resizeHandler);
     this.eventListeners.push({ target: window, type: 'resize', listener: resizeHandler });
 
+    // Add button click handler for start game
+    const startButton = document.getElementById('start-game-btn');
+    if (startButton) {
+      const clickHandler = () => {
+        if (this.gameState === GameState.MENU) {
+          this.uiAudioManager.playSound('click');
+          this.showMapSelection();
+        }
+      };
+      const hoverHandler = () => {
+        this.uiAudioManager.playSound('hover');
+      };
+      startButton.addEventListener('click', clickHandler);
+      startButton.addEventListener('mouseenter', hoverHandler);
+      this.eventListeners.push({ target: startButton, type: 'click', listener: clickHandler });
+      this.eventListeners.push({ target: startButton, type: 'mouseenter', listener: hoverHandler });
+    }
+    
+    // Add hover effects to all interactive elements
+    setTimeout(() => {
+      const menuCards = document.querySelectorAll('.menu-card');
+      menuCards.forEach(card => {
+        const hoverHandler = () => this.uiAudioManager.playSound('hover');
+        card.addEventListener('mouseenter', hoverHandler);
+        this.eventListeners.push({ target: card as HTMLElement, type: 'mouseenter', listener: hoverHandler });
+      });
+      
+      const controlItems = document.querySelectorAll('.control-item');
+      controlItems.forEach(item => {
+        const hoverHandler = () => this.uiAudioManager.playSound('hover');
+        item.addEventListener('mouseenter', hoverHandler);
+        this.eventListeners.push({ target: item as HTMLElement, type: 'mouseenter', listener: hoverHandler });
+      });
+    }, 100);
+    
     // Game controls
     const keydownHandler = (e: Event) => {
       const keyEvent = e as KeyboardEvent;
@@ -703,6 +799,8 @@ export class Game {
           this.resumeGame();
         }
       } else if (keyEvent.key === 'r' && (this.gameState === GameState.GAME_OVER || this.gameState === GameState.VICTORY)) {
+        this.restartWithSameArena();
+      } else if (keyEvent.key === 'm' && this.gameState === GameState.GAME_OVER) {
         this.restartGame();
       } else if (keyEvent.key === 'F3') {
         // Toggle stats display
@@ -796,6 +894,7 @@ export class Game {
         <p style="font-size: 1.5em; color: #ffff00;">Final Score: ${Math.round(this.score)}</p>
         <p style="font-size: 1.2em; color: #ff00ff;">Boss Level Reached: ${this.bossLevel}</p>
         <p style="margin-top: 2em;">Press R to Restart</p>
+        <p style="margin-top: 0.5em;">Press M for Map Selection</p>
       `;
       this.gameOverScreen.style.display = 'block';
     }
@@ -921,7 +1020,32 @@ export class Game {
     this.showMapSelection();
   }
 
+  private restartWithSameArena(): void {
+    // Hide game over screen
+    if (this.gameOverScreen) {
+      this.gameOverScreen.style.display = 'none';
+    }
+
+    // Keep fullscreen button visible
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    if (fullscreenBtn) {
+      fullscreenBtn.style.display = 'block';
+      fullscreenBtn.style.zIndex = '2000';
+    }
+
+    // Clear scene
+    while (this.scene.children.length > 0) {
+      this.scene.remove(this.scene.children[0]);
+    }
+
+    // Restart with the same arena
+    this.startGameWithArena(this.currentArenaName);
+  }
+
   private showMapSelection(): void {
+    // Play transition sound
+    this.uiAudioManager.playSound('transition');
+    
     // Hide menu
     if (this.menuContainer) {
       this.menuContainer.style.display = 'none';
@@ -934,6 +1058,9 @@ export class Game {
   }
 
   private startGameWithArena(arenaName: string): void {
+    // Store arena name for restart
+    this.currentArenaName = arenaName;
+    
     // Hide loading screen if still visible
     const loadingScreen = document.getElementById('loading-screen');
     if (loadingScreen) {
@@ -1028,6 +1155,11 @@ export class Game {
 
     // Initialize the arena
     this.arena.initialize();
+    
+    // If it's Monad Ecosystem arena, initialize the billboard system with camera
+    if (this.arena instanceof MonadEcosystemArena) {
+      this.arena.initializeBillboards(this.camera);
+    }
 
     // Create player
     this.player = new Player(this.scene);

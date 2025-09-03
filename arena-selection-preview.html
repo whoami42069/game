@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS ETERNAL - Arena Selection Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      height: 100vh;
+      overflow: hidden;
+      background: radial-gradient(ellipse at center, rgba(26, 31, 46, 0.95) 0%, rgba(10, 10, 10, 0.98) 100%);
+      font-family: 'Orbitron', monospace;
+      color: white;
+    }
+
+    /* CSS Variables */
+    :root {
+      --primary-cyan: #00D4FF;
+      --primary-orange: #FF6B35;
+      --secondary-purple: #8B5FBF;
+      --accent-pink: #E91E63;
+      --neutral-light: #E8F4F8;
+      --neutral-mid: #7A8B99;
+      --accent-gold: #FFD700;
+    }
+
+    /* Background effects */
+    .arena-bg-layer {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    
+    .particle-layer {
+      background-image: 
+        radial-gradient(2px 2px at 20% 30%, rgba(0, 212, 255, 0.3), transparent),
+        radial-gradient(2px 2px at 40% 70%, rgba(255, 107, 53, 0.2), transparent),
+        radial-gradient(1px 1px at 90% 40%, rgba(139, 95, 191, 0.4), transparent);
+      animation: float 20s ease-in-out infinite;
+    }
+    
+    .scan-lines {
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 212, 255, 0.03) 2px,
+        rgba(0, 212, 255, 0.03) 4px
+      );
+      animation: scan-vertical 8s linear infinite;
+    }
+    
+    .arena-holographic-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      opacity: 0.1;
+      mix-blend-mode: screen;
+      background: linear-gradient(
+        45deg,
+        transparent 30%,
+        rgba(0, 212, 255, 0.1) 50%,
+        transparent 70%
+      );
+      animation: holographicScan 4s linear infinite;
+    }
+    
+    .arena-glow-orb {
+      position: absolute;
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      filter: blur(100px);
+      opacity: 0.3;
+      pointer-events: none;
+      animation: orbFloat 10s ease-in-out infinite;
+    }
+    
+    .orb-cyan {
+      background: radial-gradient(circle, var(--primary-cyan), transparent);
+      top: -200px;
+      left: -200px;
+    }
+    
+    .orb-orange {
+      background: radial-gradient(circle, var(--primary-orange), transparent);
+      bottom: -200px;
+      right: -200px;
+      animation-delay: 5s;
+    }
+
+    /* Main container */
+    .main-container {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+      box-sizing: border-box;
+    }
+
+    /* Title section */
+    .title-section {
+      text-align: center;
+      margin-bottom: 2rem;
+      animation: fadeInDown 1s ease-out;
+    }
+
+    .title-section h1 {
+      font-size: clamp(2.5rem, 6vw, 4rem);
+      font-weight: 900;
+      color: var(--primary-cyan);
+      text-shadow: 0 0 5px var(--primary-cyan), 0 0 10px var(--primary-cyan), 0 0 20px var(--primary-cyan), 0 0 40px rgba(0, 212, 255, 0.5);
+      letter-spacing: 0.02em;
+      margin-bottom: 0.5rem;
+    }
+
+    .title-section h1 span {
+      color: var(--primary-orange);
+      text-shadow: 0 0 5px var(--primary-orange), 0 0 10px var(--primary-orange), 0 0 20px var(--primary-orange);
+    }
+
+    .title-section p {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1.3rem;
+      color: var(--secondary-purple);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      text-shadow: 0 0 10px rgba(139, 95, 191, 0.5);
+    }
+
+    /* Arena grid */
+    .arena-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 2rem;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto 2rem auto;
+      padding: 0 1rem;
+    }
+
+    /* Arena cards */
+    .arena-card {
+      min-height: 380px;
+      background: rgba(26, 31, 46, 0.6);
+      backdrop-filter: blur(15px);
+      border: 2px solid;
+      border-radius: 12px;
+      padding: 0;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      animation: cardEntry 0.6s ease-out backwards;
+    }
+
+    .arena-card:nth-child(1) { 
+      animation-delay: 0.1s;
+      border-color: var(--secondary-purple);
+    }
+    .arena-card:nth-child(2) { 
+      animation-delay: 0.2s;
+      border-color: var(--primary-cyan);
+    }
+    .arena-card:nth-child(3) { 
+      animation-delay: 0.3s;
+      border-color: var(--primary-orange);
+    }
+    .arena-card:nth-child(4) { 
+      animation-delay: 0.4s;
+      border-color: var(--accent-pink);
+    }
+
+    .arena-card:hover {
+      transform: translateY(-10px) scale(1.02);
+      box-shadow: 
+        0 15px 40px rgba(0, 0, 0, 0.5),
+        0 0 30px currentColor,
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+
+    /* Arena preview section */
+    .arena-preview {
+      height: 150px;
+      position: relative;
+      overflow: hidden;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .arena-preview-particles {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      overflow: hidden;
+    }
+
+    .particle {
+      position: absolute;
+      background: currentColor;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    /* Content section */
+    .arena-content {
+      padding: 1.5rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .arena-name {
+      font-family: 'Orbitron', monospace;
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .arena-description {
+      font-family: 'Rajdhani', sans-serif;
+      color: var(--neutral-light);
+      line-height: 1.5;
+      font-size: 0.95rem;
+      margin-bottom: 1.5rem;
+      flex: 1;
+      opacity: 0.9;
+    }
+
+    .arena-features {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .feature-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 4px;
+      border: 1px solid;
+    }
+
+    .arena-button {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+      border: 2px solid currentColor;
+      color: var(--neutral-light);
+      text-align: center;
+      padding: 1rem;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      text-transform: uppercase;
+      border-radius: 6px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .arena-button:hover {
+      background: currentColor;
+      color: #000;
+    }
+
+    /* Difficulty badges */
+    .difficulty-badge {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      padding: 0.4rem 1rem;
+      border-radius: 20px;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: #FFFFFF;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+      text-transform: uppercase;
+    }
+
+    /* Instructions bar */
+    .instructions-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(26, 31, 46, 0.8);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid rgba(0, 212, 255, 0.2);
+      padding: 1rem;
+      display: flex;
+      justify-content: center;
+      gap: 3rem;
+      font-family: 'Rajdhani', sans-serif;
+      z-index: 100;
+      animation: fadeInUp 1s ease-out 0.5s both;
+    }
+
+    .control-item {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+    }
+
+    .key-label {
+      font-family: 'JetBrains Mono', monospace;
+      padding: 0.3rem 0.8rem;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border: 1px solid;
+    }
+
+    /* Back button */
+    .back-button {
+      position: fixed;
+      top: 2rem;
+      left: 2rem;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      color: var(--primary-orange);
+      background: linear-gradient(135deg, rgba(255, 107, 53, 0.1), rgba(255, 107, 53, 0.05));
+      border: 2px solid var(--primary-orange);
+      border-radius: 8px;
+      padding: 0.8rem 1.5rem;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      backdrop-filter: blur(10px);
+      z-index: 100;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+    }
+
+    .back-button:hover {
+      background: linear-gradient(135deg, rgba(255, 107, 53, 0.2), rgba(255, 107, 53, 0.1));
+      transform: translateX(-5px);
+      box-shadow: 0 5px 20px rgba(255, 107, 53, 0.3);
+    }
+
+    /* Animations */
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); }
+      33% { transform: translate(30px, -30px) rotate(120deg); }
+      66% { transform: translate(-20px, 20px) rotate(240deg); }
+    }
+    
+    @keyframes scan-vertical {
+      0% { transform: translateY(0); }
+      100% { transform: translateY(20px); }
+    }
+    
+    @keyframes holographicScan {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    
+    @keyframes orbFloat {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(50px, -50px) scale(1.1); }
+    }
+    
+    @keyframes fadeInDown {
+      from {
+        opacity: 0;
+        transform: translateY(-30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    @keyframes cardEntry {
+      from {
+        opacity: 0;
+        transform: translateY(50px) scale(0.9);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Background effects -->
+  <div class="arena-bg-layer particle-layer"></div>
+  <div class="arena-bg-layer scan-lines"></div>
+  <div class="arena-glow-orb orb-cyan"></div>
+  <div class="arena-glow-orb orb-orange"></div>
+  <div class="arena-holographic-overlay"></div>
+
+  <!-- Main container -->
+  <div class="main-container">
+    <!-- Title section -->
+    <div class="title-section">
+      <h1>SELECT <span>ARENA</span></h1>
+      <p>Choose Your Battlefield</p>
+    </div>
+
+    <!-- Arena grid -->
+    <div class="arena-grid">
+      <!-- Monad Ecosystem -->
+      <div class="arena-card">
+        <div class="arena-preview" style="background: linear-gradient(135deg, #8B5FBF22, #8B5FBF11);">
+          <div class="arena-preview-particles"></div>
+          <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 3rem; opacity: 0.8; text-shadow: 0 0 30px #8B5FBF;">
+            🟣
+          </div>
+          <div class="difficulty-badge" style="background: linear-gradient(135deg, #8B5FBF, #8B5FBF88);">
+            PRACTICE
+          </div>
+        </div>
+        <div class="arena-content">
+          <h3 class="arena-name" style="color: #8B5FBF; text-shadow: 0 0 10px #8B5FBF66;">MONAD ECOSYSTEM</h3>
+          <p class="arena-description">Peaceful practice arena in the Monad ecosystem - no enemies, just you</p>
+          <div class="arena-features">
+            <span class="feature-tag" style="color: #8B5FBF; background: #8B5FBF22; border-color: #8B5FBF44;">No Enemies</span>
+            <span class="feature-tag" style="color: #8B5FBF; background: #8B5FBF22; border-color: #8B5FBF44;">Training Mode</span>
+            <span class="feature-tag" style="color: #8B5FBF; background: #8B5FBF22; border-color: #8B5FBF44;">Infinite Time</span>
+          </div>
+          <button class="arena-button" style="border-color: #8B5FBF; color: #8B5FBF;">ENTER ARENA</button>
+        </div>
+      </div>
+
+      <!-- Space Arena -->
+      <div class="arena-card">
+        <div class="arena-preview" style="background: linear-gradient(135deg, #00D4FF22, #00D4FF11);">
+          <div class="arena-preview-particles"></div>
+          <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 3rem; opacity: 0.8; text-shadow: 0 0 30px #00D4FF;">
+            🌌
+          </div>
+          <div class="difficulty-badge" style="background: linear-gradient(135deg, #00D4FF, #00D4FF88);">
+            NORMAL
+          </div>
+        </div>
+        <div class="arena-content">
+          <h3 class="arena-name" style="color: #00D4FF; text-shadow: 0 0 10px #00D4FF66;">SPACE ARENA</h3>
+          <p class="arena-description">Classic space battlefield with asteroids and cosmic debris</p>
+          <div class="arena-features">
+            <span class="feature-tag" style="color: #00D4FF; background: #00D4FF22; border-color: #00D4FF44;">Asteroids</span>
+            <span class="feature-tag" style="color: #00D4FF; background: #00D4FF22; border-color: #00D4FF44;">Balanced</span>
+            <span class="feature-tag" style="color: #00D4FF; background: #00D4FF22; border-color: #00D4FF44;">Classic Mode</span>
+          </div>
+          <button class="arena-button" style="border-color: #00D4FF; color: #00D4FF;">ENTER ARENA</button>
+        </div>
+      </div>
+
+      <!-- Asteroid Field -->
+      <div class="arena-card">
+        <div class="arena-preview" style="background: linear-gradient(135deg, #FF6B3522, #FF6B3511);">
+          <div class="arena-preview-particles"></div>
+          <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 3rem; opacity: 0.8; text-shadow: 0 0 30px #FF6B35;">
+            ☄️
+          </div>
+          <div class="difficulty-badge" style="background: linear-gradient(135deg, #FF6B35, #FF6B3588);">
+            HARD
+          </div>
+        </div>
+        <div class="arena-content">
+          <h3 class="arena-name" style="color: #FF6B35; text-shadow: 0 0 10px #FF6B3566;">ASTEROID FIELD</h3>
+          <p class="arena-description">Navigate through dangerous moving asteroids and meteor showers</p>
+          <div class="arena-features">
+            <span class="feature-tag" style="color: #FF6B35; background: #FF6B3522; border-color: #FF6B3544;">Moving Hazards</span>
+            <span class="feature-tag" style="color: #FF6B35; background: #FF6B3522; border-color: #FF6B3544;">Gravity Wells</span>
+            <span class="feature-tag" style="color: #FF6B35; background: #FF6B3522; border-color: #FF6B3544;">High Difficulty</span>
+          </div>
+          <button class="arena-button" style="border-color: #FF6B35; color: #FF6B35;">ENTER ARENA</button>
+        </div>
+      </div>
+
+      <!-- Nebula Zone -->
+      <div class="arena-card">
+        <div class="arena-preview" style="background: linear-gradient(135deg, #E91E6322, #E91E6311);">
+          <div class="arena-preview-particles"></div>
+          <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 3rem; opacity: 0.8; text-shadow: 0 0 30px #E91E63;">
+            ⚡
+          </div>
+          <div class="difficulty-badge" style="background: linear-gradient(135deg, #E91E63, #E91E6388);">
+            EXPERT
+          </div>
+        </div>
+        <div class="arena-content">
+          <h3 class="arena-name" style="color: #E91E63; text-shadow: 0 0 10px #E91E6366;">NEBULA ZONE</h3>
+          <p class="arena-description">Fight in a mystical nebula with electrical storms and energy rifts</p>
+          <div class="arena-features">
+            <span class="feature-tag" style="color: #E91E63; background: #E91E6322; border-color: #E91E6344;">Ion Storms</span>
+            <span class="feature-tag" style="color: #E91E63; background: #E91E6322; border-color: #E91E6344;">Energy Rifts</span>
+            <span class="feature-tag" style="color: #E91E63; background: #E91E6322; border-color: #E91E6344;">Expert Only</span>
+          </div>
+          <button class="arena-button" style="border-color: #E91E63; color: #E91E63;">ENTER ARENA</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Instructions bar -->
+  <div class="instructions-bar">
+    <div class="control-item">
+      <span class="key-label" style="background: #00D4FF33; border-color: #00D4FF66; color: #00D4FF;">←/→</span>
+      <span style="color: #E8F4F8;">Navigate</span>
+    </div>
+    <div class="control-item">
+      <span class="key-label" style="background: #FFD70033; border-color: #FFD70066; color: #FFD700;">ENTER</span>
+      <span style="color: #E8F4F8;">Select</span>
+    </div>
+    <div class="control-item">
+      <span class="key-label" style="background: #FF6B3533; border-color: #FF6B3566; color: #FF6B35;">ESC</span>
+      <span style="color: #E8F4F8;">Back</span>
+    </div>
+  </div>
+
+  <!-- Back button -->
+  <button class="back-button">
+    <span style="margin-right: 0.5rem;">←</span>
+    <span>BACK TO MENU</span>
+  </button>
+</body>
+</html>

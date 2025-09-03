@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 import { Arena, ArenaConfig } from '../Arena';
 import { TextureManager } from '@/core/TextureManager';
+import { MonadBillboardSystem } from './MonadBillboardSystem';
 
 export class MonadEcosystemArena extends Arena {
   private stars!: THREE.Points;
   private cosmicParticles!: THREE.Points;
   private textureManager: TextureManager;
   private monadLogoTexture!: THREE.Texture;
+  private billboardSystem: MonadBillboardSystem | null = null;
 
   constructor(scene: THREE.Scene) {
     const config: ArenaConfig = {
@@ -51,6 +53,18 @@ export class MonadEcosystemArena extends Arena {
     
     // Initialize the arena
     this.initialize();
+    
+    // Create billboard system (but don't initialize yet - needs camera)
+    this.billboardSystem = new MonadBillboardSystem(scene);
+  }
+  
+  /**
+   * Initialize billboards with camera (called from Game when arena is loaded)
+   */
+  public initializeBillboards(camera: THREE.Camera): void {
+    if (this.billboardSystem) {
+      this.billboardSystem.initialize(camera);
+    }
   }
 
   protected setupEnvironment(): void {
@@ -264,6 +278,11 @@ export class MonadEcosystemArena extends Arena {
   }
 
   protected updateEnvironment(deltaTime: number): void {
+    // Update billboard system
+    if (this.billboardSystem) {
+      this.billboardSystem.update(deltaTime, this.time);
+    }
+    
     // Rotate stars slowly
     if (this.stars && this.time % 0.1 < deltaTime) {
       this.stars.rotation.y += 0.0005;
@@ -317,6 +336,12 @@ export class MonadEcosystemArena extends Arena {
    * Dispose all resources
    */
   public dispose(): void {
+    // Dispose billboard system first
+    if (this.billboardSystem) {
+      this.billboardSystem.dispose();
+      this.billboardSystem = null;
+    }
+    
     // Dispose texture
     if (this.monadLogoTexture) {
       this.monadLogoTexture.dispose();

@@ -31,7 +31,7 @@ export class AsteroidFieldArena extends Arena {
 
   constructor(scene: THREE.Scene) {
     const config: ArenaConfig = {
-      name: 'Asteroid Field Arena',
+      name: 'Asteroid Field',
       platformSize: 35,
       bounds: {
         min: new THREE.Vector3(-45, 0, -45),
