@@ -576,6 +576,12 @@ export class Game {
       const leaderboardContent = document.getElementById('leaderboard-content');
       
       if (leaderboardContent) {
+        // Show loading state
+        leaderboardContent.innerHTML = '<div style="color: #00D4FF; text-align: center;">Loading blockchain scores...</div>';
+        
+        // Sync with blockchain to get latest scores
+        await leaderboardManager.syncWithBlockchain();
+        
         // Get the leaderboard HTML
         const html = leaderboardManager.getLeaderboardHTML();
         leaderboardContent.innerHTML = html;
@@ -803,16 +809,281 @@ export class Game {
     this.gameOverScreen = document.createElement('div');
     this.gameOverScreen.id = 'game-over';
     this.gameOverScreen.style.cssText = `
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      text-align: center;
-      color: #ff0000;
-      font-family: 'Courier New', monospace;
-      z-index: 1000;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
       display: none;
+      z-index: 1000;
+      background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.98));
+      backdrop-filter: blur(10px);
+      animation: gameOverFadeIn 0.5s ease-out;
     `;
+    
+    // Add game over styles
+    const gameOverStyles = document.createElement('style');
+    gameOverStyles.textContent = `
+      @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+      
+      @keyframes gameOverFadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      
+      @keyframes glitchText {
+        0%, 100% {
+          text-shadow: 
+            0 0 30px rgba(255, 0, 136, 0.8),
+            0 0 60px rgba(255, 0, 136, 0.4),
+            2px 2px 0 rgba(0, 255, 255, 0.8),
+            -2px -2px 0 rgba(255, 0, 255, 0.8);
+        }
+        25% {
+          text-shadow: 
+            0 0 30px rgba(0, 255, 255, 0.8),
+            0 0 60px rgba(0, 255, 255, 0.4),
+            -2px 2px 0 rgba(255, 0, 136, 0.8),
+            2px -2px 0 rgba(255, 255, 0, 0.8);
+        }
+        50% {
+          text-shadow: 
+            0 0 30px rgba(255, 255, 0, 0.8),
+            0 0 60px rgba(255, 255, 0, 0.4),
+            2px -2px 0 rgba(0, 255, 255, 0.8),
+            -2px 2px 0 rgba(255, 0, 136, 0.8);
+        }
+        75% {
+          text-shadow: 
+            0 0 30px rgba(255, 0, 255, 0.8),
+            0 0 60px rgba(255, 0, 255, 0.4),
+            -2px -2px 0 rgba(255, 255, 0, 0.8),
+            2px 2px 0 rgba(0, 255, 255, 0.8);
+        }
+      }
+      
+      @keyframes statPulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.05); opacity: 0.9; }
+      }
+      
+      @keyframes neonBorder {
+        0%, 100% {
+          box-shadow: 
+            0 0 20px rgba(0, 212, 255, 0.6),
+            inset 0 0 20px rgba(0, 212, 255, 0.1);
+        }
+        50% {
+          box-shadow: 
+            0 0 40px rgba(0, 212, 255, 0.8),
+            inset 0 0 30px rgba(0, 212, 255, 0.2);
+        }
+      }
+      
+      @keyframes dataStream {
+        0% { transform: translateY(0); }
+        100% { transform: translateY(-100%); }
+      }
+      
+      .game-over-container {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 90%;
+        max-width: 700px;
+        padding: 40px;
+        background: 
+          linear-gradient(135deg, 
+            rgba(13, 13, 28, 0.95), 
+            rgba(25, 0, 40, 0.95)
+          );
+        border: 2px solid transparent;
+        border-image: 
+          linear-gradient(45deg, 
+            #00ffff, #ff00ff, #ffff00, #00ff88, #00ffff
+          ) 1;
+        border-radius: 20px;
+        box-shadow: 
+          0 0 50px rgba(0, 212, 255, 0.4),
+          inset 0 0 30px rgba(0, 0, 0, 0.6),
+          0 20px 40px rgba(0, 0, 0, 0.8);
+        animation: neonBorder 3s ease-in-out infinite;
+        font-family: 'Orbitron', 'Courier New', monospace;
+      }
+      
+      .game-over-title {
+        font-size: 4.5em;
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        margin: 0 0 30px 0;
+        background: linear-gradient(90deg, #ff0088, #00ffff, #ffff00, #ff0088);
+        background-size: 200% 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: glitchText 2s ease-in-out infinite;
+        text-transform: uppercase;
+      }
+      
+      .stat-card {
+        background: 
+          linear-gradient(135deg, 
+            rgba(0, 212, 255, 0.1), 
+            rgba(255, 0, 136, 0.05)
+          );
+        border: 1px solid rgba(0, 212, 255, 0.3);
+        border-radius: 15px;
+        padding: 15px 20px;
+        margin: 10px 0;
+        position: relative;
+        overflow: hidden;
+        transition: all 0.3s ease;
+      }
+      
+      .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 
+          0 8px 20px rgba(0, 212, 255, 0.3),
+          inset 0 0 20px rgba(0, 212, 255, 0.1);
+        border-color: rgba(0, 212, 255, 0.6);
+      }
+      
+      .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, 
+          transparent, 
+          rgba(0, 212, 255, 0.3), 
+          transparent
+        );
+        transition: left 0.5s ease;
+      }
+      
+      .stat-card:hover::before {
+        left: 100%;
+      }
+      
+      .stat-label {
+        font-size: 0.9em;
+        color: rgba(0, 212, 255, 0.8);
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        margin-bottom: 5px;
+      }
+      
+      .stat-value {
+        font-size: 2em;
+        font-weight: bold;
+        color: #ffffff;
+        text-shadow: 
+          0 0 10px currentColor,
+          0 0 20px currentColor;
+      }
+      
+      .high-score-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #ffcc00, #ff9900);
+        color: #000;
+        padding: 5px 15px;
+        border-radius: 20px;
+        font-weight: bold;
+        text-transform: uppercase;
+        animation: statPulse 1.5s ease-in-out infinite;
+        box-shadow: 
+          0 0 20px rgba(255, 204, 0, 0.6),
+          inset 0 0 10px rgba(255, 255, 255, 0.3);
+        margin-left: 10px;
+      }
+      
+      .blockchain-status {
+        margin-top: 20px;
+        padding: 15px;
+        border-radius: 10px;
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .blockchain-success {
+        background: linear-gradient(135deg, rgba(0, 255, 136, 0.1), rgba(0, 255, 136, 0.05));
+        border: 1px solid #00ff88;
+      }
+      
+      .blockchain-pending {
+        background: linear-gradient(135deg, rgba(255, 200, 0, 0.1), rgba(255, 200, 0, 0.05));
+        border: 1px solid #ffc800;
+      }
+      
+      .blockchain-error {
+        background: linear-gradient(135deg, rgba(255, 100, 100, 0.1), rgba(255, 100, 100, 0.05));
+        border: 1px solid #ff6464;
+      }
+      
+      .action-buttons {
+        margin-top: 30px;
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+      }
+      
+      .action-button {
+        background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(255, 0, 136, 0.2));
+        border: 2px solid rgba(0, 212, 255, 0.6);
+        color: #00ffff;
+        padding: 15px 30px;
+        border-radius: 10px;
+        font-size: 1.1em;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .action-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 
+          0 10px 30px rgba(0, 212, 255, 0.4),
+          inset 0 0 20px rgba(0, 212, 255, 0.2);
+        border-color: #00ffff;
+        color: #ffffff;
+      }
+      
+      .action-button::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 0;
+        height: 0;
+        background: radial-gradient(circle, rgba(0, 212, 255, 0.5), transparent);
+        transition: width 0.3s ease, height 0.3s ease;
+        transform: translate(-50%, -50%);
+      }
+      
+      .action-button:hover::before {
+        width: 100%;
+        height: 100%;
+      }
+      
+      .key-hint {
+        display: inline-block;
+        background: rgba(0, 212, 255, 0.2);
+        border: 1px solid rgba(0, 212, 255, 0.4);
+        padding: 2px 8px;
+        border-radius: 5px;
+        font-size: 0.8em;
+        margin-right: 5px;
+      }
+    `;
+    document.head.appendChild(gameOverStyles);
+    
     document.body.appendChild(this.gameOverScreen);
     
     // Flash effect
@@ -1044,6 +1315,40 @@ export class Game {
     }
   }
 
+  private async updateMainMenuStats(): Promise<void> {
+    try {
+      // Fetch global stats from Monad Games API
+      const response = await fetch('https://monad-games-id-site.vercel.app/api/leaderboard?page=1&gameId=261&sortBy=scores&limit=1');
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Update high score display
+        if (data.data && data.data.length > 0) {
+          const globalHighScore = data.data[0].score;
+          const highScoreElement = document.getElementById('menu-high-score');
+          if (highScoreElement) {
+            highScoreElement.textContent = globalHighScore.toLocaleString();
+          }
+        }
+        
+        // Update total players count
+        const totalPlayers = data.pagination?.total || 0;
+        const totalPlayersElement = document.getElementById('menu-bosses-defeated');
+        if (totalPlayersElement) {
+          totalPlayersElement.textContent = totalPlayers.toString();
+          // Update the label too
+          const labelElement = totalPlayersElement.nextElementSibling;
+          if (labelElement) {
+            labelElement.textContent = 'Total Players';
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to update main menu stats from API:', error);
+    }
+  }
+
   private showMainMenu(): void {
     this.gameState = GameState.MENU;
 
@@ -1081,6 +1386,9 @@ export class Game {
       
       // Load and display leaderboard
       this.loadLeaderboard();
+      
+      // Update main menu stats with blockchain data
+      this.updateMainMenuStats();
     }
     
     // Ensure fullscreen button is visible
@@ -1172,20 +1480,47 @@ export class Game {
     // Show initial game over screen with "submitting" status
     if (this.gameOverScreen) {
       this.gameOverScreen.innerHTML = `
-        <h1 style="font-size: 3em; margin-bottom: 0.5em;">GAME OVER</h1>
-        <p style="font-size: 1.5em; color: #ffff00;">Final Score: ${finalScore}</p>
-        <p style="font-size: 1.2em; color: #ff00ff;">Boss Level Reached: ${this.bossLevel}</p>
-        <p style="font-size: 0.9em; color: #00D4FF; animation: pulse 1.5s infinite;">
-          ⛓️ Submitting score to Monad blockchain...
-        </p>
-        <style>
-          @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-          }
-        </style>
+        <div class="game-over-container">
+          <h1 class="game-over-title">GAME OVER</h1>
+          
+          <div class="stat-card">
+            <div class="stat-label">Final Score</div>
+            <div class="stat-value" style="color: #ffff00; font-size: 2.5em;">
+              ${finalScore.toLocaleString()}
+            </div>
+          </div>
+          
+          <div class="stat-card">
+            <div class="stat-label">Boss Level Reached</div>
+            <div class="stat-value" style="color: #ff00ff;">
+              Level ${this.bossLevel}
+            </div>
+          </div>
+          
+          <div class="blockchain-status blockchain-pending">
+            <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+              <div style="
+                width: 20px;
+                height: 20px;
+                border: 2px solid #00D4FF;
+                border-top: 2px solid transparent;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+              "></div>
+              <span style="color: #00D4FF; font-size: 1em;">
+                Submitting score to Monad blockchain...
+              </span>
+            </div>
+            <style>
+              @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+              }
+            </style>
+          </div>
+        </div>
       `;
-      this.gameOverScreen.style.display = 'block';
+      this.gameOverScreen.style.display = 'flex';
     }
     
     try {
@@ -1213,47 +1548,69 @@ export class Game {
         }
         
         if (isNewHighScore) {
-          highScoreText = `<p style="font-size: 1.3em; color: #00ff88; animation: pulse 2s infinite;">🏆 NEW HIGH SCORE! 🏆</p>`;
+          highScoreText = `
+            <div class="stat-card" style="border-color: #ffcc00; background: linear-gradient(135deg, rgba(255, 204, 0, 0.1), rgba(255, 153, 0, 0.05));">
+              <div class="stat-label" style="color: #ffcc00;">🏆 NEW HIGH SCORE! 🏆</div>
+              <div class="stat-value" style="color: #ffcc00;">
+                ${finalScore.toLocaleString()}
+                <span class="high-score-badge">NEW!</span>
+              </div>
+            </div>`;
         } else {
-          highScoreText = `<p style="font-size: 1em; color: #88ff88;">High Score: ${highScoreManager.formatScore(currentHighScore)}</p>`;
+          highScoreText = `
+            <div class="stat-card">
+              <div class="stat-label">Personal Best</div>
+              <div class="stat-value" style="color: #00ff88;">
+                ${highScoreManager.formatScore(currentHighScore)}
+              </div>
+            </div>`;
         }
         
         // Set blockchain status text
         if (submitSuccess) {
           blockchainText = `
-            <div style="margin-top: 1em; padding: 0.5em; background: rgba(0, 255, 136, 0.1); border-radius: 5px; border: 1px solid #00ff88;">
-              <p style="font-size: 0.9em; color: #00ff88;">✅ Score submitted to Monad blockchain!</p>
+            <div class="blockchain-status blockchain-success">
+              <p style="font-size: 1em; color: #00ff88; margin-bottom: 10px;">✅ Score submitted to Monad blockchain!</p>
               ${transactionHash ? `
                 <a href="https://testnet.monadexplorer.com/tx/${transactionHash}" 
                    target="_blank" 
                    rel="noopener noreferrer"
-                   style="color: #00D4FF; font-size: 0.8em; text-decoration: underline;"
-                   onmouseover="this.style.color='#00ff88'"
-                   onmouseout="this.style.color='#00D4FF'">
-                  View transaction on Monad Explorer 🔗
+                   style="
+                     color: #00D4FF; 
+                     font-size: 0.9em; 
+                     text-decoration: none;
+                     padding: 8px 16px;
+                     border: 1px solid #00D4FF;
+                     border-radius: 5px;
+                     display: inline-block;
+                     transition: all 0.3s ease;
+                   "
+                   onmouseover="this.style.background='rgba(0, 212, 255, 0.2)'; this.style.color='#ffffff'; this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 10px rgba(0, 212, 255, 0.3)';"
+                   onmouseout="this.style.background='transparent'; this.style.color='#00D4FF'; this.style.transform='translateY(0)'; this.style.boxShadow='none';">
+                  View on Monad Explorer 🔗
                 </a>
               ` : ''}
             </div>
           `;
         } else {
           blockchainText = `
-            <div style="margin-top: 1em; padding: 0.5em; background: rgba(255, 200, 0, 0.1); border-radius: 5px; border: 1px solid #ffc800;">
-              <p style="font-size: 0.9em; color: #ffc800;">⚠️ Score saved locally (blockchain submission pending)</p>
+            <div class="blockchain-status blockchain-pending">
+              <p style="font-size: 1em; color: #ffc800;">⚠️ Score saved locally (blockchain submission pending)</p>
             </div>
           `;
         }
       } else {
         blockchainText = `
-          <div style="margin-top: 1em; padding: 0.5em; background: rgba(255, 100, 100, 0.1); border-radius: 5px; border: 1px solid #ff6464;">
-            <p style="font-size: 0.9em; color: #ff6464;">👤 Connect wallet to save scores on-chain</p>
+          <div class="blockchain-status blockchain-error">
+            <p style="font-size: 1em; color: #ff6464;">👤 Connect wallet to save scores on-chain</p>
           </div>
         `;
       }
     } catch (error) {
       console.error('High score system error:', error);
       blockchainText = `
-        <div style="margin-top: 1em; padding: 0.5em; background: rgba(255, 100, 100, 0.1); border-radius: 5px; border: 1px solid #ff6464;">
-          <p style="font-size: 0.9em; color: #ff6464;">❌ Error submitting score to blockchain</p>
+        <div class="blockchain-status blockchain-error">
+          <p style="font-size: 1em; color: #ff6464;">❌ Error submitting score to blockchain</p>
         </div>
       `;
     }
@@ -1261,15 +1618,45 @@ export class Game {
     // Update game over screen with final status
     if (this.gameOverScreen) {
       this.gameOverScreen.innerHTML = `
-        <h1 style="font-size: 3em; margin-bottom: 0.5em;">GAME OVER</h1>
-        <p style="font-size: 1.5em; color: #ffff00;">Final Score: ${finalScore}</p>
-        ${highScoreText}
-        <p style="font-size: 1.2em; color: #ff00ff;">Boss Level Reached: ${this.bossLevel}</p>
-        ${blockchainText}
-        <p style="margin-top: 2em;">Press R to Restart</p>
-        <p style="margin-top: 0.5em;">Press M for Map Selection</p>
+        <div class="game-over-container">
+          <h1 class="game-over-title">GAME OVER</h1>
+          
+          <div class="stat-card">
+            <div class="stat-label">Final Score</div>
+            <div class="stat-value" style="color: #ffff00; font-size: 2.5em;">
+              ${finalScore.toLocaleString()}
+            </div>
+          </div>
+          
+          ${highScoreText}
+          
+          <div class="stat-card">
+            <div class="stat-label">Boss Level Reached</div>
+            <div class="stat-value" style="color: #ff00ff;">
+              <span style="font-size: 0.8em;">Level</span> ${this.bossLevel}
+            </div>
+          </div>
+          
+          <div class="stat-card">
+            <div class="stat-label">Enemies Defeated</div>
+            <div class="stat-value" style="color: #ff6600;">
+              ${Math.floor(finalScore / 10)}
+            </div>
+          </div>
+          
+          ${blockchainText}
+          
+          <div class="action-buttons">
+            <button class="action-button" onclick="window.dispatchEvent(new KeyboardEvent('keydown', {key: 'r'}))">
+              <span class="key-hint">R</span> Restart
+            </button>
+            <button class="action-button" onclick="window.dispatchEvent(new KeyboardEvent('keydown', {key: 'm'}))">
+              <span class="key-hint">M</span> Map Selection
+            </button>
+          </div>
+        </div>
       `;
-      this.gameOverScreen.style.display = 'block';
+      this.gameOverScreen.style.display = 'flex';
     }
     
     // Keep menu button visible during game over (player is still in arena)

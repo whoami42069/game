@@ -153,13 +153,18 @@ export class LeaderboardManager {
               width: 30px;
               text-align: center;
             ">${medal}</span>
-            <a href="https://testnet.monadexplorer.com/address/${entry.address}" 
-               target="_blank" 
-               rel="noopener noreferrer"
-               class="leaderboard-address-link"
-               title="${entry.transactionHash ? 'View transaction' : 'View address'}">
-              ${this.formatAddress(entry.address)} 🔗
-            </a>
+            ${entry.displayName ? `
+              <span style="color: #FFD700; font-weight: 600;">${entry.displayName}</span>
+              <span style="color: #00D4FF; font-size: 0.8rem;">(${this.formatAddress(entry.address)})</span>
+            ` : `
+              <a href="https://testnet.monadexplorer.com/address/${entry.address}" 
+                 target="_blank" 
+                 rel="noopener noreferrer"
+                 class="leaderboard-address-link"
+                 title="${entry.transactionHash ? 'View transaction' : 'View address'}">
+                ${this.formatAddress(entry.address)} 🔗
+              </a>
+            `}
           </div>
           <span class="score" style="
             font-family: 'Orbitron', monospace;
@@ -175,11 +180,68 @@ export class LeaderboardManager {
     return html;
   }
   
-  // Simulate fetching from a backend/blockchain
+  // Fetch leaderboard data from Monad Games API
   async syncWithBlockchain(): Promise<void> {
-    // In a real implementation, this would fetch scores from a smart contract or backend
-    console.log('Would sync leaderboard with blockchain...');
-    // For now, just use local storage as the source of truth
+    try {
+      console.log('🔄 Syncing leaderboard with Monad Games API...');
+      
+      // Fetch from Monad Games leaderboard API directly
+      const response = await fetch('https://monad-games-id-site.vercel.app/api/leaderboard?page=1&gameId=261&sortBy=scores&limit=10');
+      
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.data && data.data.length > 0) {
+        // Clear existing leaderboard to replace with API data
+        this.leaderboard = [];
+        
+        // Add API scores to leaderboard
+        for (const entry of data.data) {
+          this.leaderboard.push({
+            address: entry.walletAddress,
+            score: entry.score,
+            timestamp: Date.now(),
+            displayName: entry.username, // Include username from API
+            transactionHash: '' // API doesn't provide tx hash
+          });
+        }
+        
+        // Already sorted by API, just save
+        this.saveLeaderboard();
+        
+        console.log(`✅ Synced ${this.leaderboard.length} scores from Monad Games API`);
+      } else {
+        console.log('ℹ️ No scores found in API');
+      }
+    } catch (error) {
+      console.error('❌ Failed to sync with Monad Games API:', error);
+      
+      // Fallback to blockchain method
+      try {
+        const { highScoreManager } = await import('./HighScoreManager');
+        const blockchainScores = await highScoreManager.fetchAllGameScores();
+        
+        if (blockchainScores.length > 0) {
+          this.leaderboard = [];
+          for (const entry of blockchainScores) {
+            this.leaderboard.push({
+              address: entry.player,
+              score: entry.score,
+              timestamp: Date.now(),
+              transactionHash: entry.transactionHash
+            });
+          }
+          this.sortAndTrim();
+          this.saveLeaderboard();
+          console.log(`✅ Synced ${this.leaderboard.length} scores from blockchain fallback`);
+        }
+      } catch (blockchainError) {
+        console.error('❌ Blockchain fallback also failed:', blockchainError);
+      }
+    }
   }
   
   // Test method to add a sample entry with transaction hash

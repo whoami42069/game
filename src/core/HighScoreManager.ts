@@ -331,14 +331,62 @@ export class HighScoreManager {
   }
   
   async loadHighScoreFromChain(): Promise<number> {
-    // For now, return local score
-    // In production, you'd read from the smart contract
     const contractAddress = import.meta.env.VITE_GAME_CONTRACT_ADDRESS;
+    const gameAddress = import.meta.env.VITE_GAME_ADDRESS;
     
-    if (contractAddress && contractAddress !== '0x0000000000000000000000000000000000000000' && this.publicClient && this.currentWalletAddress) {
+    if (contractAddress && contractAddress !== '0x0000000000000000000000000000000000' && this.publicClient && this.currentWalletAddress) {
       try {
-        // Would read high score from contract
-        console.log('Would read high score from contract for:', this.currentWalletAddress);
+        console.log('📊 Fetching high score from blockchain for:', this.currentWalletAddress);
+        
+        // Get the latest block number
+        const latestBlock = await this.publicClient.getBlockNumber();
+        
+        // Fetch recent player scores (simplified)
+        const fromBlock = latestBlock > BigInt(99) ? latestBlock - BigInt(99) : BigInt(0);
+        
+        const logs = await this.publicClient.getLogs({
+          address: contractAddress as `0x${string}`,
+          event: {
+            anonymous: false,
+            inputs: [
+              { indexed: true, name: 'game', type: 'address' },
+              { indexed: true, name: 'player', type: 'address' },
+              { indexed: true, name: 'scoreAmount', type: 'uint256' },
+              { indexed: false, name: 'transactionAmount', type: 'uint256' }
+            ],
+            name: 'PlayerDataUpdated',
+            type: 'event'
+          },
+          args: {
+            game: gameAddress as `0x${string}`,
+            player: this.currentWalletAddress as `0x${string}`
+          },
+          fromBlock: fromBlock,
+          toBlock: latestBlock
+        });
+        
+        if (logs.length > 0) {
+          // Find the highest score from all events
+          let highestScore = 0;
+          for (const log of logs) {
+            const score = Number(log.args.scoreAmount);
+            if (score > highestScore) {
+              highestScore = score;
+            }
+          }
+          
+          console.log('✅ Found blockchain high score:', highestScore);
+          
+          // Update local high score if blockchain has higher
+          if (highestScore > this.localHighScore) {
+            this.localHighScore = highestScore;
+            localStorage.setItem('highScore', highestScore.toString());
+          }
+          
+          return highestScore;
+        } else {
+          console.log('ℹ️ No blockchain scores found for this player');
+        }
       } catch (error) {
         console.error('Failed to load high score from chain:', error);
       }
@@ -358,6 +406,152 @@ export class HighScoreManager {
   // Check if current score beats high score
   isNewHighScore(score: number): boolean {
     return score > this.localHighScore;
+  }
+  
+  // Fetch all scores from Monad Games API
+  async fetchAllGameScores(): Promise<Array<{player: string, score: number, transactionHash: string}>> {
+    try {
+      console.log('🎮 Fetching scores from Monad Games API...');
+      
+      // Fetch from Monad Games leaderboard API
+      const response = await fetch('https://monad-games-id-site.vercel.app/api/leaderboard?page=1&gameId=261&sortBy=scores&limit=50');
+      
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      console.log(`📊 Found ${data.data?.length || 0} scores from API`);
+      
+      // Convert API response to our format
+      const scores = (data.data || []).map((entry: any) => ({
+        player: entry.walletAddress,
+        score: entry.score,
+        transactionHash: '' // API doesn't provide tx hash
+      }));
+      
+      return scores;
+      
+    } catch (error) {
+      console.error('❌ Failed to fetch from Monad Games API, falling back to blockchain:', error);
+      
+      // Fallback to blockchain fetching
+      return this.fetchAllGameScoresFromBlockchain();
+    }
+  }
+  
+  // Original blockchain fetching method (as fallback)
+  private async fetchAllGameScoresFromBlockchain(): Promise<Array<{player: string, score: number, transactionHash: string}>> {
+    const contractAddress = import.meta.env.VITE_GAME_CONTRACT_ADDRESS;
+    const gameAddress = import.meta.env.VITE_GAME_ADDRESS;
+    
+    if (!contractAddress || contractAddress === '0x0000000000000000000000000000000000000000' || !this.publicClient) {
+      console.log('⚠️ Cannot fetch game scores - blockchain not configured');
+      return [];
+    }
+    
+    try {
+      console.log('🎮 Fetching scores for game:', gameAddress);
+      
+      // Get the latest block number
+      const latestBlock = await this.publicClient.getBlockNumber();
+      
+      // Try to fetch from a known good starting point
+      // We know there are scores around block 34876507
+      const KNOWN_SCORE_BLOCK = BigInt(34876000);
+      let allLogs = [];
+      
+      // Try fetching recent blocks first
+      try {
+        const recentFrom = latestBlock > BigInt(99) ? latestBlock - BigInt(99) : BigInt(0);
+        const recentLogs = await this.publicClient.getLogs({
+          address: contractAddress as `0x${string}`,
+          event: {
+            anonymous: false,
+            inputs: [
+              { indexed: true, name: 'game', type: 'address' },
+              { indexed: true, name: 'player', type: 'address' },
+              { indexed: true, name: 'scoreAmount', type: 'uint256' },
+              { indexed: false, name: 'transactionAmount', type: 'uint256' }
+            ],
+            name: 'PlayerDataUpdated',
+            type: 'event'
+          },
+          args: {
+            game: gameAddress as `0x${string}`
+          },
+          fromBlock: recentFrom,
+          toBlock: latestBlock
+        });
+        allLogs.push(...recentLogs);
+      } catch (e) {
+        console.warn('Failed to fetch recent logs:', e);
+      }
+      
+      // Also try fetching from known score area
+      if (latestBlock > KNOWN_SCORE_BLOCK) {
+        try {
+          const historicLogs = await this.publicClient.getLogs({
+            address: contractAddress as `0x${string}`,
+            event: {
+              anonymous: false,
+              inputs: [
+                { indexed: true, name: 'game', type: 'address' },
+                { indexed: true, name: 'player', type: 'address' },
+                { indexed: true, name: 'scoreAmount', type: 'uint256' },
+                { indexed: false, name: 'transactionAmount', type: 'uint256' }
+              ],
+              name: 'PlayerDataUpdated',
+              type: 'event'
+            },
+            args: {
+              game: gameAddress as `0x${string}`
+            },
+            fromBlock: KNOWN_SCORE_BLOCK,
+            toBlock: KNOWN_SCORE_BLOCK + BigInt(99)
+          });
+          allLogs.push(...historicLogs);
+        } catch (e) {
+          console.warn('Failed to fetch historic logs:', e);
+        }
+      }
+      
+      const logs = allLogs;
+      console.log(`📦 Fetched ${logs.length} events from blockchain`);
+      
+      console.log(`📊 Found ${logs.length} score submissions on-chain`);
+      
+      // Process logs and get highest score per player
+      const playerScores = new Map<string, {score: number, transactionHash: string}>();
+      
+      for (const log of logs) {
+        const player = log.args.player as string;
+        const score = Number(log.args.scoreAmount);
+        const txHash = log.transactionHash;
+        
+        const existing = playerScores.get(player);
+        if (!existing || score > existing.score) {
+          playerScores.set(player, { score, transactionHash: txHash });
+        }
+      }
+      
+      // Convert to array and sort by score
+      const scores = Array.from(playerScores.entries())
+        .map(([player, data]) => ({
+          player,
+          score: data.score,
+          transactionHash: data.transactionHash
+        }))
+        .sort((a, b) => b.score - a.score);
+      
+      console.log(`✅ Processed ${scores.length} unique player high scores`);
+      return scores;
+      
+    } catch (error) {
+      console.error('❌ Failed to fetch game scores from blockchain:', error);
+      return [];
+    }
   }
   
   // Helper method to verify account has balance for gas
