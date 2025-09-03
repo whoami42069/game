@@ -17,6 +17,17 @@ dist-ssr/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.*
+!.env.example
+!.env.template
+
+# Private keys and secrets
+*.key
+*.pem
+*_key.txt
+*_secret.txt
+private_key*
+secret*
 
 # Editor directories and files
 .vscode/

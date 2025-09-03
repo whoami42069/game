@@ -1166,6 +1166,27 @@ export class Game {
     const finalScore = Math.round(this.score);
     let isNewHighScore = false;
     let highScoreText = '';
+    let blockchainText = '';
+    let transactionHash: string | undefined;
+    
+    // Show initial game over screen with "submitting" status
+    if (this.gameOverScreen) {
+      this.gameOverScreen.innerHTML = `
+        <h1 style="font-size: 3em; margin-bottom: 0.5em;">GAME OVER</h1>
+        <p style="font-size: 1.5em; color: #ffff00;">Final Score: ${finalScore}</p>
+        <p style="font-size: 1.2em; color: #ff00ff;">Boss Level Reached: ${this.bossLevel}</p>
+        <p style="font-size: 0.9em; color: #00D4FF; animation: pulse 1.5s infinite;">
+          ⛓️ Submitting score to Monad blockchain...
+        </p>
+        <style>
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+          }
+        </style>
+      `;
+      this.gameOverScreen.style.display = 'block';
+    }
     
     try {
       const { highScoreManager } = await import('./HighScoreManager');
@@ -1178,28 +1199,73 @@ export class Game {
         isNewHighScore = highScoreManager.isNewHighScore(finalScore);
         const currentHighScore = highScoreManager.getHighScore();
         
-        // Always submit score to blockchain on game over
-        console.log('Submitting final score to blockchain:', finalScore);
-        await highScoreManager.submitScore(finalScore);
+        // Submit score to blockchain
+        console.log('🎮 Submitting final score to blockchain:', finalScore);
+        const submitSuccess = await highScoreManager.submitScore(finalScore);
+        
+        // Check localStorage for transaction hash that may have been saved
+        const savedTxData = localStorage.getItem(`last_tx_${this.walletAddress}`);
+        if (savedTxData) {
+          const txData = JSON.parse(savedTxData);
+          if (txData.score === finalScore) {
+            transactionHash = txData.hash;
+          }
+        }
         
         if (isNewHighScore) {
           highScoreText = `<p style="font-size: 1.3em; color: #00ff88; animation: pulse 2s infinite;">🏆 NEW HIGH SCORE! 🏆</p>`;
         } else {
           highScoreText = `<p style="font-size: 1em; color: #88ff88;">High Score: ${highScoreManager.formatScore(currentHighScore)}</p>`;
         }
+        
+        // Set blockchain status text
+        if (submitSuccess) {
+          blockchainText = `
+            <div style="margin-top: 1em; padding: 0.5em; background: rgba(0, 255, 136, 0.1); border-radius: 5px; border: 1px solid #00ff88;">
+              <p style="font-size: 0.9em; color: #00ff88;">✅ Score submitted to Monad blockchain!</p>
+              ${transactionHash ? `
+                <a href="https://testnet.monadexplorer.com/tx/${transactionHash}" 
+                   target="_blank" 
+                   rel="noopener noreferrer"
+                   style="color: #00D4FF; font-size: 0.8em; text-decoration: underline;"
+                   onmouseover="this.style.color='#00ff88'"
+                   onmouseout="this.style.color='#00D4FF'">
+                  View transaction on Monad Explorer 🔗
+                </a>
+              ` : ''}
+            </div>
+          `;
+        } else {
+          blockchainText = `
+            <div style="margin-top: 1em; padding: 0.5em; background: rgba(255, 200, 0, 0.1); border-radius: 5px; border: 1px solid #ffc800;">
+              <p style="font-size: 0.9em; color: #ffc800;">⚠️ Score saved locally (blockchain submission pending)</p>
+            </div>
+          `;
+        }
+      } else {
+        blockchainText = `
+          <div style="margin-top: 1em; padding: 0.5em; background: rgba(255, 100, 100, 0.1); border-radius: 5px; border: 1px solid #ff6464;">
+            <p style="font-size: 0.9em; color: #ff6464;">👤 Connect wallet to save scores on-chain</p>
+          </div>
+        `;
       }
     } catch (error) {
       console.error('High score system error:', error);
+      blockchainText = `
+        <div style="margin-top: 1em; padding: 0.5em; background: rgba(255, 100, 100, 0.1); border-radius: 5px; border: 1px solid #ff6464;">
+          <p style="font-size: 0.9em; color: #ff6464;">❌ Error submitting score to blockchain</p>
+        </div>
+      `;
     }
 
-    // Update and show pre-created game over screen
+    // Update game over screen with final status
     if (this.gameOverScreen) {
       this.gameOverScreen.innerHTML = `
         <h1 style="font-size: 3em; margin-bottom: 0.5em;">GAME OVER</h1>
         <p style="font-size: 1.5em; color: #ffff00;">Final Score: ${finalScore}</p>
         ${highScoreText}
         <p style="font-size: 1.2em; color: #ff00ff;">Boss Level Reached: ${this.bossLevel}</p>
-        ${isNewHighScore ? '<p style="font-size: 0.9em; color: #8888ff;">Score saved to blockchain!</p>' : ''}
+        ${blockchainText}
         <p style="margin-top: 2em;">Press R to Restart</p>
         <p style="margin-top: 0.5em;">Press M for Map Selection</p>
       `;
