@@ -572,15 +572,18 @@ export class Game {
   
   private async loadLeaderboard(): Promise<void> {
     try {
+      console.log('🎮 Loading leaderboard...');
       const { leaderboardManager } = await import('./LeaderboardManager');
       const leaderboardContent = document.getElementById('leaderboard-content');
       
       if (leaderboardContent) {
         // Show loading state
-        leaderboardContent.innerHTML = '<div style="color: #00D4FF; text-align: center;">Loading blockchain scores...</div>';
+        leaderboardContent.innerHTML = '<div style="color: #00D4FF; text-align: center;">Loading scores from Monad Games...</div>';
         
+        console.log('📡 Starting sync with API...');
         // Sync with blockchain to get latest scores
         await leaderboardManager.syncWithBlockchain();
+        console.log('✅ Sync complete');
         
         // Get the leaderboard HTML
         const html = leaderboardManager.getLeaderboardHTML();
@@ -1317,10 +1320,26 @@ export class Game {
 
   private async updateMainMenuStats(): Promise<void> {
     try {
-      // Fetch global stats from Monad Games API
-      const response = await fetch('https://monad-games-id-site.vercel.app/api/leaderboard?page=1&gameId=261&sortBy=scores&limit=1');
+      // Fetch global stats from Monad Games API using CORS proxy
+      const originalUrl = 'https://monad-games-id-site.vercel.app/api/leaderboard?page=1&gameId=261&sortBy=scores&limit=1';
       
-      if (response.ok) {
+      // Try multiple proxies
+      const corsProxies = [
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(originalUrl)}`,
+        `https://corsproxy.io/?${encodeURIComponent(originalUrl)}`
+      ];
+      
+      let response;
+      for (const proxyUrl of corsProxies) {
+        try {
+          response = await fetch(proxyUrl);
+          if (response.ok) break;
+        } catch (e) {
+          console.warn('Stats proxy failed, trying next');
+        }
+      }
+      
+      if (response && response.ok) {
         const data = await response.json();
         
         // Update high score display

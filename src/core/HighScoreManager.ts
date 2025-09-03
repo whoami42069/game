@@ -413,8 +413,9 @@ export class HighScoreManager {
     try {
       console.log('🎮 Fetching scores from Monad Games API...');
       
-      // Fetch from Monad Games leaderboard API
-      const response = await fetch('https://monad-games-id-site.vercel.app/api/leaderboard?page=1&gameId=261&sortBy=scores&limit=50');
+      // Fetch from Monad Games leaderboard API using CORS proxy
+      const originalUrl = 'https://monad-games-id-site.vercel.app/api/leaderboard?page=1&gameId=261&sortBy=scores&limit=50';
+      const response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(originalUrl)}`);
       
       if (!response.ok) {
         throw new Error(`API request failed: ${response.status}`);

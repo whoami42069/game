@@ -185,14 +185,33 @@ export class LeaderboardManager {
     try {
       console.log('🔄 Syncing leaderboard with Monad Games API...');
       
-      // Fetch from Monad Games leaderboard API directly
-      const response = await fetch('https://monad-games-id-site.vercel.app/api/leaderboard?page=1&gameId=261&sortBy=scores&limit=10');
+      // Fetch from Monad Games leaderboard API using CORS proxy
+      const originalUrl = 'https://monad-games-id-site.vercel.app/api/leaderboard?page=1&gameId=261&sortBy=scores&limit=10';
+      // Try multiple CORS proxies in case one fails
+      const corsProxies = [
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(originalUrl)}`,
+        `https://corsproxy.io/?${encodeURIComponent(originalUrl)}`,
+        `https://proxy.cors.sh/${originalUrl}`
+      ];
       
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
+      console.log('📡 Fetching from Monad Games API via CORS proxy');
+      
+      let response;
+      for (const proxyUrl of corsProxies) {
+        try {
+          response = await fetch(proxyUrl);
+          if (response.ok) break;
+        } catch (e) {
+          console.warn('Proxy failed, trying next:', e);
+        }
+      }
+      
+      if (!response || !response.ok) {
+        throw new Error(response ? `API request failed: ${response.status}` : 'All CORS proxies failed');
       }
       
       const data = await response.json();
+      console.log('📦 API Response:', data);
       
       if (data.data && data.data.length > 0) {
         // Clear existing leaderboard to replace with API data
