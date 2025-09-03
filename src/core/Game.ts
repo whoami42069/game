@@ -115,6 +115,10 @@ export class Game {
   private mapSelectionScreen: MapSelectionScreen | null = null;
   private currentArenaName: string = 'Space Arena'; // Store current arena for restart
 
+  // Wallet authentication state
+  private walletAddress: string | null = null;
+  private walletConnect: any = null;
+  
   // Track safe timer/interval wrappers
   private safeSetTimeout(callback: () => void, delay: number): number {
     const id = setTimeout(() => {
@@ -586,8 +590,11 @@ export class Game {
         
         <!-- Center content -->
         <div class="menu-content">
-          <div class="cta-container">
-            <button class="cta-primary" id="start-game-btn">
+          <div class="cta-container" style="display: flex; flex-direction: column; gap: 1rem; align-items: center;">
+            <button class="cta-primary" id="wallet-connect-btn" style="background: linear-gradient(135deg, rgba(139, 95, 191, 0.2), rgba(255, 107, 53, 0.1)); border-color: var(--secondary-purple);">
+              <span id="wallet-text">Connect Wallet</span>
+            </button>
+            <button class="cta-primary" id="start-game-btn" style="display: none;">
               Press <span class="key-highlight">ENTER</span> to Select Arena
             </button>
           </div>
@@ -752,13 +759,76 @@ export class Game {
     window.addEventListener('resize', resizeHandler);
     this.eventListeners.push({ target: window, type: 'resize', listener: resizeHandler });
 
+    // Add button click handler for wallet connection
+    const walletButton = document.getElementById('wallet-connect-btn');
+    if (walletButton) {
+      const walletClickHandler = async () => {
+        this.uiAudioManager.playSound('click');
+        const walletText = document.getElementById('wallet-text');
+        if (walletText) {
+          walletText.textContent = 'Connecting...';
+        }
+        
+        try {
+          // Lazy load privyReactAuth
+          if (!this.walletConnect) {
+            const { privyReactAuth } = await import('./PrivyReactAuth');
+            this.walletConnect = privyReactAuth;
+          }
+          
+          const address = await this.walletConnect.connect();
+          if (address) {
+            this.walletAddress = address;
+            const shortAddress = this.walletConnect.getShortAddress();
+          if (walletText) {
+            walletText.textContent = shortAddress || 'Connected';
+          }
+          
+            // Update button text to show connected status
+            if (walletText) {
+              walletText.textContent = shortAddress + ' (Connected)';
+            }
+            
+            // Show the start button after successful wallet connection
+            const startBtn = document.getElementById('start-game-btn');
+            if (startBtn) {
+              startBtn.style.display = 'block';
+            }
+            
+            // Hide the wallet button
+            if (walletButton) {
+              walletButton.style.display = 'none';
+            }
+          } else {
+            if (walletText) {
+              walletText.textContent = 'Connect Wallet';
+            }
+          }
+        } catch (error) {
+          console.error('Wallet connection error:', error);
+          if (walletText) {
+            walletText.textContent = 'Connection Failed - Try Again';
+          }
+        }
+      };
+      const walletHoverHandler = () => {
+        this.uiAudioManager.playSound('hover');
+      };
+      walletButton.addEventListener('click', walletClickHandler);
+      walletButton.addEventListener('mouseenter', walletHoverHandler);
+      this.eventListeners.push({ target: walletButton, type: 'click', listener: walletClickHandler });
+      this.eventListeners.push({ target: walletButton, type: 'mouseenter', listener: walletHoverHandler });
+    }
+    
     // Add button click handler for start game
     const startButton = document.getElementById('start-game-btn');
     if (startButton) {
       const clickHandler = () => {
-        if (this.gameState === GameState.MENU) {
+        if (this.gameState === GameState.MENU && this.walletAddress) {
           this.uiAudioManager.playSound('click');
           this.showMapSelection();
+        } else if (this.gameState === GameState.MENU && !this.walletAddress) {
+          console.log('Wallet not connected - cannot start game');
         }
       };
       const hoverHandler = () => {
@@ -790,7 +860,7 @@ export class Game {
     // Game controls
     const keydownHandler = (e: Event) => {
       const keyEvent = e as KeyboardEvent;
-      if (keyEvent.key === 'Enter' && this.gameState === GameState.MENU) {
+      if (keyEvent.key === 'Enter' && this.gameState === GameState.MENU && this.walletAddress) {
         this.showMapSelection();
       } else if (keyEvent.key === 'Escape') {
         if (this.gameState === GameState.PLAYING) {
@@ -850,6 +920,23 @@ export class Game {
     // Show pre-created menu
     if (this.menuContainer) {
       this.menuContainer.style.display = 'block';
+      
+      // Update wallet button state
+      const walletBtn = document.getElementById('wallet-connect-btn');
+      const startBtn = document.getElementById('start-game-btn');
+      const walletText = document.getElementById('wallet-text');
+      
+      if (this.walletConnect && this.walletConnect.getAddress()) {
+        this.walletAddress = this.walletConnect.getAddress();
+        const shortAddress = this.walletConnect.getShortAddress();
+        if (walletText) walletText.textContent = shortAddress + ' (Connected)';
+        if (walletBtn) walletBtn.style.display = 'none';
+        if (startBtn) startBtn.style.display = 'block';
+      } else {
+        if (walletText) walletText.textContent = 'Connect Wallet';
+        if (walletBtn) walletBtn.style.display = 'block';
+        if (startBtn) startBtn.style.display = 'none';
+      }
     }
     
     // Ensure fullscreen button is visible

@@ -12,15 +12,21 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "three": "^0.167.1",
-    "postprocessing": "^6.35.6",
+    "@privy-io/js-sdk-core": "^0.54.2",
+    "@privy-io/react-auth": "^2.24.0",
+    "axios": "^1.11.0",
     "howler": "^2.2.4",
-    "stats.js": "^0.17.0"
+    "postprocessing": "^6.35.6",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "stats.js": "^0.17.0",
+    "three": "^0.167.1",
+    "viem": "^2.37.2"
   },
   "devDependencies": {
-    "@types/three": "^0.167.2",
-    "@types/stats.js": "^0.17.3",
     "@types/howler": "^2.2.11",
+    "@types/stats.js": "^0.17.3",
+    "@types/three": "^0.167.2",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
     "eslint": "^8.57.0",
