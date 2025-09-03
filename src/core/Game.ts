@@ -68,7 +68,7 @@ export class Game {
   private isRunning: boolean = false;
   private animationId: number | null = null;
   private gameState: GameState = GameState.MENU;
-  
+
   // Static reusable objects to prevent allocation in loops
   private static tempColor = new THREE.Color();
   private static tempVelocity = new THREE.Vector3();
@@ -105,7 +105,7 @@ export class Game {
   private eventListeners: Array<{ target: EventTarget, type: string, listener: EventListener }> = [];
   private frameCount: number = 0;
   private lastGCTime: number = 0;
-  
+
   // Pre-created UI elements for performance
   private menuContainer: HTMLDivElement | null = null;
   private pauseMenu: HTMLDivElement | null = null;
@@ -118,7 +118,7 @@ export class Game {
   // Wallet authentication state
   private walletAddress: string | null = null;
   private walletConnect: any = null;
-  
+
   // Track safe timer/interval wrappers
   private safeSetTimeout(callback: () => void, delay: number): number {
     const id = setTimeout(() => {
@@ -167,46 +167,46 @@ export class Game {
     this.initPostProcessing();
     this.initCombatFeedback();
     this.initStats();
-    
+
     // Start comprehensive preloading during loading screen
     this.startPreloading();
 
     console.log('🎮 Game instance created');
   }
-  
+
   private async startPreloading(): Promise<void> {
     const loadingText = document.querySelector('.loading-text');
-    
+
     try {
       // Phase 1: Pre-create UI elements
       if (loadingText) loadingText.textContent = 'Initializing UI...';
       await this.asyncPreCreateUIElements();
-      
+
       // Phase 2: Generate and cache all textures
       if (loadingText) loadingText.textContent = 'Generating HD textures...';
       await this.asyncPreloadTextures();
-      
+
       // Phase 3: Pre-create game entities to trigger shader compilation
       if (loadingText) loadingText.textContent = 'Compiling shaders...';
       await this.precompileShaders();
-      
+
       // Phase 4: Warm up JIT compiler with game logic
       if (loadingText) loadingText.textContent = 'Optimizing game engine...';
       await this.warmupJIT();
-      
+
       // Phase 5: Final setup
       if (loadingText) loadingText.textContent = 'Starting game...';
       this.setupEventListeners();
-      
+
       // Hide loading screen and show menu
       const loadingScreen = document.getElementById('loading-screen');
       if (loadingScreen) {
         loadingScreen.style.display = 'none';
       }
-      
+
       // Show main menu
       this.showMainMenu();
-      
+
     } catch (error) {
       console.error('Preloading failed:', error);
       if (loadingText) loadingText.textContent = 'Loading failed. Please refresh.';
@@ -315,34 +315,34 @@ export class Game {
 
   private async asyncPreloadTextures(): Promise<void> {
     const textureManager = TextureManager.getInstance();
-    
+
     // Pre-generate all textures used in the game
     await new Promise<void>((resolve) => {
       // Player textures
       Player.cachedHullTextures = textureManager.generateBattleDamagedHullTexture(512, 0.4);
       Player.cachedWingTextures = textureManager.generateBattleDamagedHullTexture(256, 0.6);
       Player.cachedEngineTextures = textureManager.generateBattleDamagedHullTexture(256, 0.8);
-      
+
       // Boss textures
       SimpleBoss.cachedHullTextures = textureManager.generateMetallicPanelTexture(512, 0.9);
       SimpleBoss.cachedSaucerTextures = textureManager.generateMetallicPanelTexture(1024, 0.92);
-      
+
       // Common metallic textures
       textureManager.generateMetallicPanelTexture(256, 0.85);
       textureManager.generateMetallicPanelTexture(128, 0.8);
-      
+
       // Arena textures
       textureManager.generatePlatformTexture(512);
       textureManager.generateAsteroidTexture(512);
-      
+
       // Particle textures
       this.preloadParticleTextures();
-      
+
       console.log('✅ All textures pre-generated and cached');
       resolve();
     });
   }
-  
+
   // Keep preloaded entities to prevent shader/texture disposal
   private preloadedScene: THREE.Scene | null = null;
   private preloadedEntities: {
@@ -351,70 +351,70 @@ export class Game {
     arena: Arena | null;
     minions: Minion[];
   } = {
-    player: null,
-    boss: null,
-    arena: null,
-    minions: []
-  };
-  
+      player: null,
+      boss: null,
+      arena: null,
+      minions: []
+    };
+
   private async precompileShaders(): Promise<void> {
     console.log('Starting comprehensive precompilation...');
-    
+
     // Create a REAL scene that we'll keep in memory
     this.preloadedScene = new THREE.Scene();
-    
+
     // Add fog and lights like the real game
     this.preloadedScene.fog = new THREE.FogExp2(0x000033, 0.008);
     this.preloadedScene.background = new THREE.Color(0x000033);
-    
+
     // Create REAL arena
     console.log('Creating arena...');
     this.preloadedEntities.arena = new SpaceArena(this.preloadedScene);
-    
+
     // Force render to compile arena shaders
     this.renderer.render(this.preloadedScene, this.camera);
-    
+
     // Create REAL player
     console.log('Creating player...');
     this.preloadedEntities.player = new Player(this.preloadedScene);
-    
+
     // Force render to compile player shaders
     this.renderer.render(this.preloadedScene, this.camera);
-    
+
     // Create REAL boss at level 1
     console.log('Creating boss level 1...');
     this.preloadedEntities.boss = new SimpleBoss(this.preloadedScene, 1);
-    
+
     // Force render to compile boss shaders
     this.renderer.render(this.preloadedScene, this.camera);
-    
+
     // Simulate gameplay to trigger ALL shader variants
     console.log('Simulating phase changes...');
-    
+
     // Trigger phase 2 (66% health)
     this.preloadedEntities.boss.health = this.preloadedEntities.boss.maxHealth * 0.6;
     for (let i = 0; i < 10; i++) {
       this.preloadedEntities.boss.update(0.016, new THREE.Vector3(0, 0, 0));
       this.renderer.render(this.preloadedScene, this.camera);
     }
-    
+
     // Trigger phase 3 (33% health)
     this.preloadedEntities.boss.health = this.preloadedEntities.boss.maxHealth * 0.3;
     for (let i = 0; i < 10; i++) {
       this.preloadedEntities.boss.update(0.016, new THREE.Vector3(0, 0, 0));
       this.renderer.render(this.preloadedScene, this.camera);
     }
-    
+
     // Evolve to level 2 and render
     console.log('Evolving boss to level 2...');
     this.preloadedEntities.boss.evolve();
-    
+
     // Render multiple frames after evolution
     for (let i = 0; i < 10; i++) {
       this.preloadedEntities.boss.update(0.016, new THREE.Vector3(i, 0, i));
       this.renderer.render(this.preloadedScene, this.camera);
     }
-    
+
     // Create and render minions
     console.log('Creating minions...');
     for (let i = 0; i < 3; i++) {
@@ -422,17 +422,17 @@ export class Game {
       this.preloadedEntities.minions.push(minion);
       this.renderer.render(this.preloadedScene, this.camera);
     }
-    
+
     // Create item drops
     console.log('Creating item drops...');
     const itemTypes = [ItemType.HEALTH_POTION, ItemType.ENERGY_POTION, ItemType.WEAPON_UPGRADE, ItemType.SHIELD, ItemType.SPEED_BOOST];
     const tempDrops: ItemDrop[] = [];
     for (const type of itemTypes) {
-      const itemData = { 
-        type, 
-        value: 10, 
-        rarity: 1, 
-        name: 'test', 
+      const itemData = {
+        type,
+        value: 10,
+        rarity: 1,
+        name: 'test',
         description: 'test',
         color: 0xffffff,
         duration: 5
@@ -441,7 +441,7 @@ export class Game {
       tempDrops.push(tempDrop);
       this.renderer.render(this.preloadedScene, this.camera);
     }
-    
+
     // Create projectiles and render them
     console.log('Creating projectiles...');
     const projectileGeometry = new THREE.SphereGeometry(0.3, 8, 8);
@@ -453,11 +453,11 @@ export class Game {
     const tempProjectile = new THREE.Mesh(projectileGeometry, projectileMaterial);
     this.preloadedScene.add(tempProjectile);
     this.renderer.render(this.preloadedScene, this.camera);
-    
+
     // Force compile ALL shaders
     console.log('Compiling all shaders...');
     this.renderer.compile(this.preloadedScene, this.camera);
-    
+
     // Render with post-processing
     if (this.postProcessingManager) {
       console.log('Warming up post-processing...');
@@ -465,56 +465,56 @@ export class Game {
         this.postProcessingManager.render(0.016);
       }
     }
-    
+
     // Clean up temporary items only (keep main entities)
     tempDrops.forEach(drop => drop.dispose());
     this.preloadedScene.remove(tempProjectile);
     projectileGeometry.dispose();
     projectileMaterial.dispose();
-    
+
     // Hide preloaded entities but keep them in memory
     this.preloadedScene.visible = false;
-    
+
     console.log('✅ All shaders and textures fully compiled and cached');
-    
+
     await new Promise(resolve => setTimeout(resolve, 100));
   }
-  
+
   private async warmupJIT(): Promise<void> {
     // Run game logic functions multiple times to trigger JIT optimization
     const warmupIterations = 100;
-    
+
     // Create temporary objects for warmup
     const tempVec3 = new THREE.Vector3();
     const tempProjectiles: THREE.Mesh[] = [];
-    
+
     for (let i = 0; i < warmupIterations; i++) {
       // Warm up collision detection
       tempVec3.distanceTo(new THREE.Vector3(i, i, i));
-      
+
       // Warm up math operations
       const angle = Math.atan2(i, i);
       Math.sin(angle);
       Math.cos(angle);
-      
+
       // Warm up array operations
       tempProjectiles.push(new THREE.Mesh());
       if (tempProjectiles.length > 10) {
         tempProjectiles.shift();
       }
     }
-    
+
     // Clean up
     tempProjectiles.forEach(p => {
       if (p.geometry) p.geometry.dispose();
       if (p.material) (p.material as THREE.Material).dispose();
     });
-    
+
     console.log('✅ JIT compiler warmed up');
-    
+
     await new Promise(resolve => setTimeout(resolve, 50));
   }
-  
+
   private preloadParticleTextures(): void {
     // Create a shared particle texture that all GPUParticleSystem instances can use
     // This prevents each system from creating its own texture during gameplay
@@ -522,7 +522,7 @@ export class Game {
     canvas.width = 64;
     canvas.height = 64;
     const ctx = canvas.getContext('2d')!;
-    
+
     // Create gradient particle texture
     const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
     gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
@@ -530,36 +530,36 @@ export class Game {
     gradient.addColorStop(0.4, 'rgba(255, 200, 100, 0.6)');
     gradient.addColorStop(0.6, 'rgba(255, 100, 50, 0.4)');
     gradient.addColorStop(1, 'rgba(255, 50, 0, 0)');
-    
+
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 64, 64);
-    
+
     // Store the texture for later use
     const particleTexture = new THREE.CanvasTexture(canvas);
     particleTexture.needsUpdate = true;
-    
+
     // Cache it in TextureManager or a static property
     (window as any).__cachedParticleTexture = particleTexture;
-    
+
     console.log('✨ Particle textures preloaded');
   }
-  
+
   // Removed - now part of precompileShaders
-  
+
   private formatPlayTime(seconds: number): string {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   }
-  
+
   private async loadHighScoreForWallet(): Promise<void> {
     if (!this.walletAddress) return;
-    
+
     try {
       const { highScoreManager } = await import('./HighScoreManager');
       await highScoreManager.initialize(this.walletAddress);
       const highScore = highScoreManager.getHighScore();
-      
+
       // Update the high score display in menu
       const highScoreElement = document.getElementById('menu-high-score');
       if (highScoreElement) {
@@ -569,26 +569,26 @@ export class Game {
       console.error('Failed to load high score:', error);
     }
   }
-  
+
   private async loadLeaderboard(): Promise<void> {
     try {
       console.log('🎮 Loading leaderboard...');
       const { leaderboardManager } = await import('./LeaderboardManager');
       const leaderboardContent = document.getElementById('leaderboard-content');
-      
+
       if (leaderboardContent) {
         // Show loading state
         leaderboardContent.innerHTML = '<div style="color: #00D4FF; text-align: center;">Loading scores from Monad Games...</div>';
-        
+
         console.log('📡 Starting sync with API...');
         // Sync with blockchain to get latest scores
         await leaderboardManager.syncWithBlockchain();
         console.log('✅ Sync complete');
-        
+
         // Get the leaderboard HTML
         const html = leaderboardManager.getLeaderboardHTML();
         leaderboardContent.innerHTML = html;
-        
+
         // If user is connected, highlight their entry
         if (this.walletAddress) {
           const rank = leaderboardManager.getRank(this.walletAddress);
@@ -617,28 +617,28 @@ export class Game {
       }
     }
   }
-  
+
   private async asyncPreCreateUIElements(): Promise<void> {
     // Pre-create all UI elements to avoid DOM manipulation during gameplay
-    
+
     // Remove any existing menus first
     const existingMenu = document.getElementById('main-menu');
     if (existingMenu) existingMenu.remove();
-    
+
     const existingPause = document.getElementById('pause-menu');
     if (existingPause) existingPause.remove();
-    
+
     const existingGameOver = document.getElementById('game-over');
     if (existingGameOver) existingGameOver.remove();
-    
+
     // Check if mobile or small screen
     const isMobile = window.innerWidth <= 768 || window.innerHeight <= 600;
-    
+
     // Main menu with professional design
     this.menuContainer = document.createElement('div');
     this.menuContainer.id = 'main-menu';
     this.menuContainer.style.display = 'none';
-    
+
     // Mobile version - ONLY Connect Wallet UI
     if (isMobile) {
       this.menuContainer.innerHTML = `
@@ -725,7 +725,7 @@ export class Game {
           <div class="info-section">
             <!-- Leaderboard panel -->
             <div class="menu-card" style="margin-bottom: 1rem;">
-              <h3 class="info-title" style="color: #FFD700; margin-bottom: 1rem;">🏆 Global Leaderboard</h3>
+              <h3 class="info-title" style="color: #FFD700; margin-bottom: 1rem;"> Total Score Leaderboard</h3>
               <div id="leaderboard-content" style="font-family: 'Rajdhani', sans-serif; max-height: 250px; overflow-y: auto;">
                 <div style="color: #7A8B99; text-align: center; padding: 1rem;">
                   Loading scores...
@@ -787,7 +787,7 @@ export class Game {
       `;
     }
     document.body.appendChild(this.menuContainer);
-    
+
     // Pause menu
     this.pauseMenu = document.createElement('div');
     this.pauseMenu.id = 'pause-menu';
@@ -807,7 +807,7 @@ export class Game {
       <p style="font-size: 1.2em;">Press ESC to Resume</p>
     `;
     document.body.appendChild(this.pauseMenu);
-    
+
     // Game over screen
     this.gameOverScreen = document.createElement('div');
     this.gameOverScreen.id = 'game-over';
@@ -823,7 +823,7 @@ export class Game {
       backdrop-filter: blur(10px);
       animation: gameOverFadeIn 0.5s ease-out;
     `;
-    
+
     // Add game over styles
     const gameOverStyles = document.createElement('style');
     gameOverStyles.textContent = `
@@ -1086,9 +1086,9 @@ export class Game {
       }
     `;
     document.head.appendChild(gameOverStyles);
-    
+
     document.body.appendChild(this.gameOverScreen);
-    
+
     // Flash effect
     this.flashDiv = document.createElement('div');
     this.flashDiv.id = 'flash-effect';
@@ -1103,7 +1103,7 @@ export class Game {
       display: none;
     `;
     document.body.appendChild(this.flashDiv);
-    
+
     // Boss evolve flash effect (pre-created to prevent memory leak)
     const bossFlash = document.createElement('div');
     bossFlash.id = 'boss-evolve-flash';
@@ -1121,7 +1121,7 @@ export class Game {
       opacity: 0;
     `;
     document.body.appendChild(bossFlash);
-    
+
     // Level announcement
     this.announcementDiv = document.createElement('div');
     this.announcementDiv.id = 'level-announcement';
@@ -1136,7 +1136,7 @@ export class Game {
       display: none;
     `;
     document.body.appendChild(this.announcementDiv);
-    
+
     // Initialize Map Selection Screen
     this.mapSelectionScreen = new MapSelectionScreen();
     this.mapSelectionScreen.setOnArenaSelected((selectedArena: Arena) => {
@@ -1148,9 +1148,9 @@ export class Game {
     this.mapSelectionScreen.setOnBackToMenu(() => {
       this.showMainMenu();
     });
-    
+
     console.log('🎮 UI elements pre-created');
-    
+
     await new Promise(resolve => setTimeout(resolve, 50));
   }
 
@@ -1168,33 +1168,33 @@ export class Game {
         if (walletText) {
           walletText.textContent = 'Connecting...';
         }
-        
+
         try {
           // Lazy load privyReactAuth
           if (!this.walletConnect) {
             const { privyReactAuth } = await import('./PrivyReactAuth');
             this.walletConnect = privyReactAuth;
           }
-          
+
           const address = await this.walletConnect.connect();
           if (address) {
             this.walletAddress = address;
             const shortAddress = this.walletConnect.getShortAddress();
-          if (walletText) {
-            walletText.textContent = shortAddress || 'Connected';
-          }
-          
+            if (walletText) {
+              walletText.textContent = shortAddress || 'Connected';
+            }
+
             // Update button text to show connected status
             if (walletText) {
               walletText.textContent = shortAddress + ' (Connected)';
             }
-            
+
             // Show the start button after successful wallet connection
             const startBtn = document.getElementById('start-game-btn');
             if (startBtn) {
               startBtn.style.display = 'block';
             }
-            
+
             // Hide the wallet button
             if (walletButton) {
               walletButton.style.display = 'none';
@@ -1219,7 +1219,7 @@ export class Game {
       this.eventListeners.push({ target: walletButton, type: 'click', listener: walletClickHandler });
       this.eventListeners.push({ target: walletButton, type: 'mouseenter', listener: walletHoverHandler });
     }
-    
+
     // Add button click handler for start game
     const startButton = document.getElementById('start-game-btn');
     if (startButton) {
@@ -1239,7 +1239,7 @@ export class Game {
       this.eventListeners.push({ target: startButton, type: 'click', listener: clickHandler });
       this.eventListeners.push({ target: startButton, type: 'mouseenter', listener: hoverHandler });
     }
-    
+
     // Add hover effects to all interactive elements
     setTimeout(() => {
       const menuCards = document.querySelectorAll('.menu-card');
@@ -1248,7 +1248,7 @@ export class Game {
         card.addEventListener('mouseenter', hoverHandler);
         this.eventListeners.push({ target: card as HTMLElement, type: 'mouseenter', listener: hoverHandler });
       });
-      
+
       const controlItems = document.querySelectorAll('.control-item');
       controlItems.forEach(item => {
         const hoverHandler = () => this.uiAudioManager.playSound('hover');
@@ -1256,7 +1256,7 @@ export class Game {
         this.eventListeners.push({ target: item as HTMLElement, type: 'mouseenter', listener: hoverHandler });
       });
     }, 100);
-    
+
     // Game controls
     const keydownHandler = (e: Event) => {
       const keyEvent = e as KeyboardEvent;
@@ -1291,7 +1291,7 @@ export class Game {
     };
     document.addEventListener('visibilitychange', visibilityHandler);
     this.eventListeners.push({ target: document, type: 'visibilitychange', listener: visibilityHandler });
-    
+
     // Handle menu button event
     const menuButtonHandler = () => {
       if (this.gameState === GameState.PLAYING) {
@@ -1322,13 +1322,13 @@ export class Game {
     try {
       // Fetch global stats from Monad Games API using CORS proxy
       const originalUrl = 'https://monad-games-id-site.vercel.app/api/leaderboard?page=1&gameId=261&sortBy=scores&limit=1';
-      
+
       // Try multiple proxies
       const corsProxies = [
         `https://api.allorigins.win/raw?url=${encodeURIComponent(originalUrl)}`,
         `https://corsproxy.io/?${encodeURIComponent(originalUrl)}`
       ];
-      
+
       let response;
       for (const proxyUrl of corsProxies) {
         try {
@@ -1338,10 +1338,10 @@ export class Game {
           console.warn('Stats proxy failed, trying next');
         }
       }
-      
+
       if (response && response.ok) {
         const data = await response.json();
-        
+
         // Update high score display
         if (data.data && data.data.length > 0) {
           const globalHighScore = data.data[0].score;
@@ -1350,7 +1350,7 @@ export class Game {
             highScoreElement.textContent = globalHighScore.toLocaleString();
           }
         }
-        
+
         // Update total players count
         const totalPlayers = data.pagination?.total || 0;
         const totalPlayersElement = document.getElementById('menu-bosses-defeated');
@@ -1379,22 +1379,22 @@ export class Game {
     // Show pre-created menu
     if (this.menuContainer) {
       this.menuContainer.style.display = 'block';
-      
+
       // Update wallet button state
       const walletBtn = document.getElementById('wallet-connect-btn');
       const startBtn = document.getElementById('start-game-btn');
       const walletText = document.getElementById('wallet-text');
-      
+
       // Check for existing Privy session first
       this.checkExistingPrivySession();
-      
+
       if (this.walletConnect && this.walletConnect.getAddress()) {
         this.walletAddress = this.walletConnect.getAddress();
         const shortAddress = this.walletConnect.getShortAddress();
         if (walletText) walletText.textContent = shortAddress + ' (Connected)';
         if (walletBtn) walletBtn.style.display = 'none';
         if (startBtn) startBtn.style.display = 'block';
-        
+
         // Load high score for connected wallet
         this.loadHighScoreForWallet();
       } else {
@@ -1402,21 +1402,21 @@ export class Game {
         if (walletBtn) walletBtn.style.display = 'block';
         if (startBtn) startBtn.style.display = 'none';
       }
-      
+
       // Load and display leaderboard
       this.loadLeaderboard();
-      
+
       // Update main menu stats with blockchain data
       this.updateMainMenuStats();
     }
-    
+
     // Ensure fullscreen button is visible
     const fullscreenBtn = document.getElementById('fullscreen-btn');
     if (fullscreenBtn) {
       fullscreenBtn.style.display = 'block';
       fullscreenBtn.style.zIndex = '2000';
     }
-    
+
     // Hide menu button in main menu
     const menuBtn = document.getElementById('menu-btn');
     if (menuBtn) {
@@ -1431,30 +1431,30 @@ export class Game {
       // Check localStorage for Privy session data
       const privyToken = localStorage.getItem('privy:token');
       const privyUser = localStorage.getItem('privy:user');
-      
+
       if (privyToken && privyUser) {
         console.log('Found existing Privy session, attempting to restore...');
-        
+
         // Initialize Privy if not already done
         if (!this.walletConnect) {
           const { privyReactAuth } = await import('./PrivyReactAuth');
           this.walletConnect = privyReactAuth;
         }
-        
+
         // Check if wallet is already connected
         const existingAddress = this.walletConnect.getAddress();
         if (existingAddress) {
           this.walletAddress = existingAddress;
           const shortAddress = this.walletConnect.getShortAddress();
-          
+
           const walletText = document.getElementById('wallet-text');
           const walletBtn = document.getElementById('wallet-connect-btn');
           const startBtn = document.getElementById('start-game-btn');
-          
+
           if (walletText) walletText.textContent = shortAddress + ' (Connected)';
           if (walletBtn) walletBtn.style.display = 'none';
           if (startBtn) startBtn.style.display = 'block';
-          
+
           console.log('Privy session restored successfully');
         }
       }
@@ -1488,14 +1488,14 @@ export class Game {
 
   private async gameOver(): Promise<void> {
     this.gameState = GameState.GAME_OVER;
-    
+
     // Import and initialize high score manager
     const finalScore = Math.round(this.score);
     let isNewHighScore = false;
     let highScoreText = '';
     let blockchainText = '';
     let transactionHash: string | undefined;
-    
+
     // Show initial game over screen with "submitting" status
     if (this.gameOverScreen) {
       this.gameOverScreen.innerHTML = `
@@ -1541,22 +1541,22 @@ export class Game {
       `;
       this.gameOverScreen.style.display = 'flex';
     }
-    
+
     try {
       const { highScoreManager } = await import('./HighScoreManager');
-      
+
       // Initialize with wallet address if connected
       if (this.walletAddress) {
         await highScoreManager.initialize(this.walletAddress);
-        
+
         // Check if this is a new high score
         isNewHighScore = highScoreManager.isNewHighScore(finalScore);
         const currentHighScore = highScoreManager.getHighScore();
-        
+
         // Submit score to blockchain
         console.log('🎮 Submitting final score to blockchain:', finalScore);
         const submitSuccess = await highScoreManager.submitScore(finalScore);
-        
+
         // Check localStorage for transaction hash that may have been saved
         const savedTxData = localStorage.getItem(`last_tx_${this.walletAddress}`);
         if (savedTxData) {
@@ -1565,7 +1565,7 @@ export class Game {
             transactionHash = txData.hash;
           }
         }
-        
+
         if (isNewHighScore) {
           highScoreText = `
             <div class="stat-card" style="border-color: #ffcc00; background: linear-gradient(135deg, rgba(255, 204, 0, 0.1), rgba(255, 153, 0, 0.05));">
@@ -1584,7 +1584,7 @@ export class Game {
               </div>
             </div>`;
         }
-        
+
         // Set blockchain status text
         if (submitSuccess) {
           blockchainText = `
@@ -1677,7 +1677,7 @@ export class Game {
       `;
       this.gameOverScreen.style.display = 'flex';
     }
-    
+
     // Keep menu button visible during game over (player is still in arena)
     const menuBtn = document.getElementById('menu-btn');
     if (menuBtn) {
@@ -1736,7 +1736,7 @@ export class Game {
               const oldDrop = this.itemDrops.shift();
               if (oldDrop) oldDrop.dispose();
             }
-            
+
             const itemDrop = new ItemDrop(this.scene, dropPosition, itemData);
             this.itemDrops.push(itemDrop);
           }
@@ -1749,7 +1749,7 @@ export class Game {
         if (this.boss && this.gameState === GameState.PLAYING) {
           // Show level announcement first
           this.showLevelAnnouncement(this.bossLevel);
-          
+
           // Evolve boss after announcement with extra delay
           setTimeout(() => {
             if (this.boss && this.gameState === GameState.PLAYING) {
@@ -1821,7 +1821,7 @@ export class Game {
   public returnToMapSelection(): void {
     // Stop current game
     this.gameState = GameState.MENU;
-    
+
     // Hide menu button
     const menuBtn = document.getElementById('menu-btn');
     if (menuBtn) {
@@ -1833,35 +1833,35 @@ export class Game {
       this.gameUI.dispose();
       this.gameUI = null;
     }
-    
+
     if (this.player) {
       this.player.dispose();
       this.player = null;
     }
-    
+
     if (this.boss) {
       this.boss.dispose();
       this.boss = null;
     }
-    
+
     if (this.arena) {
       this.arena.dispose();
       this.arena = null;
     }
-    
+
     // Clear minions
     for (const minion of this.minions) {
       minion.dispose();
     }
     this.minions = [];
-    
+
     // Clear projectiles
     for (const projectile of this.projectiles) {
       this.disposeProjectile(projectile);
       this.scene.remove(projectile);
     }
     this.projectiles = [];
-    
+
     // Clear item drops
     for (const drop of this.itemDrops) {
       drop.dispose();
@@ -1902,12 +1902,12 @@ export class Game {
   private showMapSelection(): void {
     // Play transition sound
     this.uiAudioManager.playSound('transition');
-    
+
     // Hide menu
     if (this.menuContainer) {
       this.menuContainer.style.display = 'none';
     }
-    
+
     // Show map selection screen
     if (this.mapSelectionScreen) {
       this.mapSelectionScreen.show();
@@ -1917,7 +1917,7 @@ export class Game {
   private startGameWithArena(arenaName: string): void {
     // Store arena name for restart
     this.currentArenaName = arenaName;
-    
+
     // Hide loading screen if still visible
     const loadingScreen = document.getElementById('loading-screen');
     if (loadingScreen) {
@@ -1930,7 +1930,7 @@ export class Game {
       fullscreenBtn.style.display = 'block';
       fullscreenBtn.style.zIndex = '2000'; // Ensure it's above game UI
     }
-    
+
     // Show menu button during gameplay
     const menuBtn = document.getElementById('menu-btn');
     if (menuBtn) {
@@ -1943,28 +1943,28 @@ export class Game {
       this.gameUI.dispose();
       this.gameUI = null;
     }
-    
+
     if (this.player) {
       this.player.dispose();
       this.player = null;
     }
-    
+
     if (this.boss) {
       this.boss.dispose();
       this.boss = null;
     }
-    
+
     if (this.arena) {
       this.arena.dispose();
       this.arena = null;
     }
-    
+
     // Clear minions
     for (const minion of this.minions) {
       minion.dispose();
     }
     this.minions = [];
-    
+
     // Clear projectiles
     for (const projectile of this.projectiles) {
       this.disposeProjectile(projectile);
@@ -1977,12 +1977,12 @@ export class Game {
     this.bossLevel = 1;
     this.comboMultiplier = 1;
     this.lastMinionSpawnTime = Date.now();
-    
+
     // Initialize UI first (lightweight)
     this.inventory = new Inventory();
     this.gameUI = new GameUI();
     this.performanceMonitor = new PerformanceMonitor();
-    
+
     // Initialize combo display to show x1
     if (this.gameUI) {
       this.gameUI.updateCombo(this.comboMultiplier);
@@ -2019,7 +2019,7 @@ export class Game {
 
     // Initialize the arena
     this.arena.initialize();
-    
+
     // If it's Monad Ecosystem arena, initialize the billboard system with camera
     if (this.arena instanceof MonadEcosystemArena) {
       this.arena.initializeBillboards(this.camera);
@@ -2027,15 +2027,15 @@ export class Game {
 
     // Create player
     this.player = new Player(this.scene);
-    
+
     // Only create boss and enemies for combat arenas (not Monad Ecosystem)
     if (arenaName !== 'Monad Ecosystem') {
       this.boss = new SimpleBoss(this.scene, this.bossLevel);
     }
-    
+
     // Setup inventory hotkey usage listener
     this.setupInventoryListener();
-    
+
     console.log(`🎮 Game started with ${arenaName}!`);
   }
 
@@ -2046,7 +2046,7 @@ export class Game {
     }
 
     console.log('🎮 Starting game engine...');
-    
+
     this.isRunning = true;
     this.gameLoop();
 
@@ -2078,7 +2078,7 @@ export class Game {
 
   public stop(): void {
     this.pause();
-    
+
     // Dispose preloaded entities
     if (this.preloadedEntities.player) {
       this.preloadedEntities.player.dispose();
@@ -2094,7 +2094,7 @@ export class Game {
     }
     this.preloadedEntities.minions.forEach(m => m.dispose());
     this.preloadedEntities.minions = [];
-    
+
     if (this.preloadedScene) {
       this.preloadedScene.clear();
       this.preloadedScene = null;
@@ -2317,7 +2317,7 @@ export class Game {
       // Update player with camera for camera-relative movement
       if (this.player && this.arena) {
         this.player.update(modifiedDeltaTime, this.arena.getBounds(), this.camera, this.inputManager);
-        
+
         // Update asteroid field arena with player position for collision detection
         if (this.arena instanceof AsteroidFieldArena) {
           this.arena.updatePlayerPosition(this.player.position);
@@ -2328,7 +2328,7 @@ export class Game {
         if (projectiles) {
           // Count existing player projectiles
           const playerProjectileCount = this.projectiles.filter(p => p.userData.owner === 'player').length;
-          
+
           for (const proj of projectiles) {
             // Enforce limits to prevent memory issues
             if (this.projectiles.length >= this.MAX_PROJECTILES) {
@@ -2339,7 +2339,7 @@ export class Game {
                 this.disposeProjectile(oldProj);
               }
             }
-            
+
             // Check per-owner limit
             if (playerProjectileCount < this.MAX_PROJECTILES_PER_OWNER) {
               this.projectiles.push(proj);
@@ -2354,7 +2354,7 @@ export class Game {
 
       // Only update boss and spawn minions if not in Monad Ecosystem (practice arena)
       const isMonadEcosystem = this.arena instanceof MonadEcosystemArena;
-      
+
       // Update boss
       if (this.boss && this.player && this.arena && !isMonadEcosystem) {
         this.boss.update(modifiedDeltaTime, this.player.position, this.arena.getBounds());
@@ -2364,7 +2364,7 @@ export class Game {
         if (bossProjectiles) {
           // Count existing boss projectiles
           const bossProjectileCount = this.projectiles.filter(p => p.userData.owner === 'boss').length;
-          
+
           for (const proj of bossProjectiles) {
             // Enforce limits
             if (this.projectiles.length >= this.MAX_PROJECTILES) {
@@ -2374,7 +2374,7 @@ export class Game {
                 this.disposeProjectile(oldProj);
               }
             }
-            
+
             if (bossProjectileCount < this.MAX_PROJECTILES_PER_OWNER) {
               this.projectiles.push(proj);
               this.scene.add(proj);
@@ -2401,7 +2401,7 @@ export class Game {
         for (let i = this.minions.length - 1; i >= 0; i--) {
           const minion = this.minions[i];
           const minionProjectiles = minion.update(this.player.position, modifiedDeltaTime);
-          
+
           // Add minion projectiles to the game's projectile system
           if (minionProjectiles) {
             for (const proj of minionProjectiles) {
@@ -2413,7 +2413,7 @@ export class Game {
                   this.disposeProjectile(oldProj);
                 }
               }
-              
+
               this.projectiles.push(proj);
               this.scene.add(proj);
             }
@@ -2595,7 +2595,7 @@ export class Game {
           this.handlePlayerHit(damage, projectile.position.clone());
           shouldRemove = true;
         }
-        
+
         // Only check minions if projectile hasn't hit boss and minions exist
         if (!shouldRemove && this.minions.length > 0) {
           for (let j = this.minions.length - 1; j >= 0; j--) {
@@ -2615,12 +2615,12 @@ export class Game {
                   const points = 10 * this.comboMultiplier;
                   this.score += points;
                   this.lastHitTime = now;
-                  
+
                   // Clear existing combo timeout
                   if (this.comboTimeoutId !== null) {
                     clearTimeout(this.comboTimeoutId);
                   }
-                  
+
                   // Set new timeout to reset combo after 1.2 seconds
                   this.comboTimeoutId = window.setTimeout(() => {
                     this.comboMultiplier = 1;
@@ -2629,7 +2629,7 @@ export class Game {
                     }
                     this.comboTimeoutId = null;
                   }, 1200);
-                  
+
                   if (this.gameUI) {
                     this.gameUI.showNotification(`+${points}`, '#ffff00', 500);
                     this.gameUI.updateCombo(this.comboMultiplier);
@@ -2729,7 +2729,7 @@ export class Game {
             const oldDrop = this.itemDrops.shift();
             if (oldDrop) oldDrop.dispose();
           }
-          
+
           const itemDrop = new ItemDrop(this.scene, dropPosition, itemData);
           this.itemDrops.push(itemDrop);
         }
@@ -2770,7 +2770,7 @@ export class Game {
 
   private showLevelAnnouncement(level: number): void {
     if (!this.announcementDiv) return;
-    
+
     // Reset and show announcement
     this.announcementDiv.textContent = `LEVEL ${level}`;
     this.announcementDiv.style.cssText = `
@@ -2789,12 +2789,12 @@ export class Game {
       transition: all 0.5s ease-out;
       display: block;
     `;
-    
+
     // Trigger animation on next frame
     const animFrame = requestAnimationFrame(() => {
       this.animationFrames.delete(animFrame);
       if (!this.announcementDiv) return;
-      
+
       this.announcementDiv.style.transform = 'translate(-50%, -50%) scale(1)';
       this.announcementDiv.style.opacity = '1';
 
@@ -2802,10 +2802,10 @@ export class Game {
       const timer1 = setTimeout(() => {
         this.timers.delete(timer1);
         if (!this.announcementDiv) return;
-        
+
         this.announcementDiv.style.transform = 'translate(-50%, -50%) scale(0.8)';
         this.announcementDiv.style.opacity = '0';
-        
+
         // Hide after transition
         const timer2 = setTimeout(() => {
           this.timers.delete(timer2);
@@ -2850,12 +2850,12 @@ export class Game {
       });
       projectile.clear();
     }
-    
+
     // Dispose geometry
     if (projectile.geometry) {
       projectile.geometry.dispose();
     }
-    
+
     // Dispose material(s)
     if (projectile.material) {
       if (Array.isArray(projectile.material)) {
@@ -2864,7 +2864,7 @@ export class Game {
         projectile.material.dispose();
       }
     }
-    
+
     // Clear userData to break references
     projectile.userData = {};
   }
@@ -3112,7 +3112,7 @@ export class Game {
 
     // Clean up orphaned DOM elements
     this.createdElements = this.createdElements.filter(el => document.body.contains(el));
-    
+
     // Clean up any orphaned minion explosion particles
     const explosions = (window as any).__minionExplosions;
     if (explosions && explosions.length > 0) {
