@@ -93,11 +93,6 @@ export class WalletConnect {
   }
 }
 
-// Add type declaration for window.ethereum
-declare global {
-  interface Window {
-    ethereum?: any;
-  }
-}
+// Type declaration moved to vite-env.d.ts
 
 export const walletConnect = new WalletConnect();

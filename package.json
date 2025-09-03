@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@types/howler": "^2.2.11",
+    "@types/react-dom": "^19.1.9",
     "@types/stats.js": "^0.17.3",
     "@types/three": "^0.167.2",
     "@typescript-eslint/eslint-plugin": "^6.21.0",

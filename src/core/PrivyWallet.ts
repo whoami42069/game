@@ -1,3 +1,4 @@
+// @ts-ignore - Privy SDK types issue
 import { PrivyClient } from '@privy-io/js-sdk-core';
 
 class PrivyWallet {

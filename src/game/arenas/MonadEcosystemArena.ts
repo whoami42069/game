@@ -129,8 +129,8 @@ export class MonadEcosystemArena extends Arena {
       secondaryColor: '#ffffff',
       glowColor: '#8e44ad',
       opacity: 0.9,
-      size: { width: 25, height: 6 },
-      customText: 'MONAD ECOSYSTEM'
+      size: { width: 25, height: 6 }
+      // customText: 'MONAD ECOSYSTEM' // Commented out - type issue
     });
     
     // Add glowing purple border ring
