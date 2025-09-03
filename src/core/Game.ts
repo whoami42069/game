@@ -622,105 +622,161 @@ export class Game {
     const existingGameOver = document.getElementById('game-over');
     if (existingGameOver) existingGameOver.remove();
     
+    // Check if mobile or small screen
+    const isMobile = window.innerWidth <= 768 || window.innerHeight <= 600;
+    
     // Main menu with professional design
     this.menuContainer = document.createElement('div');
     this.menuContainer.id = 'main-menu';
     this.menuContainer.style.display = 'none';
-    this.menuContainer.innerHTML = `
-      <!-- Background effects -->
-      <div class="menu-bg-layer particle-layer"></div>
-      <div class="menu-bg-layer scan-lines"></div>
-      <div class="menu-glow-orb orb-cyan"></div>
-      <div class="menu-glow-orb orb-orange"></div>
-      <div class="holographic-overlay"></div>
-      
-      <!-- Main grid layout -->
-      <div class="menu-grid">
-        <!-- Title section -->
-        <div class="title-section">
-          <h1 class="title-hero">
+    
+    // Mobile version - ONLY Connect Wallet UI
+    if (isMobile) {
+      this.menuContainer.innerHTML = `
+        <!-- Background effects -->
+        <div class="menu-bg-layer particle-layer"></div>
+        <div class="menu-bg-layer scan-lines"></div>
+        <div class="menu-glow-orb orb-cyan"></div>
+        <div class="menu-glow-orb orb-orange"></div>
+        
+        <!-- Mobile-only centered wallet connect -->
+        <div style="
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          text-align: center;
+          width: 90%;
+          max-width: 400px;
+          z-index: 10;
+        ">
+          <!-- Title -->
+          <h1 class="title-hero" style="font-size: clamp(2rem, 10vw, 4rem); margin-bottom: 2rem;">
             NEXUS
-            <span class="title-accent">ETERNAL</span>
+            <span class="title-accent" style="display: block;">ETERNAL</span>
           </h1>
-          <p class="title-subtitle">Endless Boss Rush</p>
+          
+          <!-- Connect Wallet Button -->
+          <button class="cta-primary" id="wallet-connect-btn" style="
+            background: linear-gradient(135deg, rgba(139, 95, 191, 0.2), rgba(255, 107, 53, 0.1)); 
+            border-color: var(--secondary-purple);
+            width: 100%;
+            padding: 1.5rem 2rem;
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+          ">
+            <span id="wallet-text">Connect Wallet</span>
+          </button>
+          
+          <!-- Start Game Button (hidden initially) -->
+          <button class="cta-primary" id="start-game-btn" style="
+            display: none;
+            width: 100%;
+            padding: 1.5rem 2rem;
+            font-size: 1.2rem;
+          ">
+            Start Game
+          </button>
         </div>
+      `;
+    } else {
+      // Desktop version - Full menu
+      this.menuContainer.innerHTML = `
+        <!-- Background effects -->
+        <div class="menu-bg-layer particle-layer"></div>
+        <div class="menu-bg-layer scan-lines"></div>
+        <div class="menu-glow-orb orb-cyan"></div>
+        <div class="menu-glow-orb orb-orange"></div>
+        <div class="holographic-overlay"></div>
         
-        <!-- Center content -->
-        <div class="menu-content">
-          <div class="cta-container" style="display: flex; flex-direction: column; gap: 1rem; align-items: center;">
-            <button class="cta-primary" id="wallet-connect-btn" style="background: linear-gradient(135deg, rgba(139, 95, 191, 0.2), rgba(255, 107, 53, 0.1)); border-color: var(--secondary-purple);">
-              <span id="wallet-text">Connect Wallet</span>
-            </button>
-            <button class="cta-primary" id="start-game-btn" style="display: none;">
-              Press <span class="key-highlight">ENTER</span> to Select Arena
-            </button>
+        <!-- Main grid layout -->
+        <div class="menu-grid">
+          <!-- Title section -->
+          <div class="title-section">
+            <h1 class="title-hero">
+              NEXUS
+              <span class="title-accent">ETERNAL</span>
+            </h1>
+            <p class="title-subtitle">Endless Boss Rush</p>
           </div>
-        </div>
-        
-        <!-- Info panel with Leaderboard -->
-        <div class="info-section">
-          <!-- Leaderboard panel -->
-          <div class="menu-card" style="margin-bottom: 1rem;">
-            <h3 class="info-title" style="color: #FFD700; margin-bottom: 1rem;">🏆 Global Leaderboard</h3>
-            <div id="leaderboard-content" style="font-family: 'Rajdhani', sans-serif; max-height: 250px; overflow-y: auto;">
-              <div style="color: #7A8B99; text-align: center; padding: 1rem;">
-                Loading scores...
+          
+          <!-- Center content -->
+          <div class="menu-content">
+            <div class="cta-container" style="display: flex; flex-direction: column; gap: 1rem; align-items: center;">
+              <button class="cta-primary" id="wallet-connect-btn" style="background: linear-gradient(135deg, rgba(139, 95, 191, 0.2), rgba(255, 107, 53, 0.1)); border-color: var(--secondary-purple);">
+                <span id="wallet-text">Connect Wallet</span>
+              </button>
+              <button class="cta-primary" id="start-game-btn" style="display: none;">
+                Press <span class="key-highlight">ENTER</span> to Select Arena
+              </button>
+            </div>
+          </div>
+          
+          <!-- Info panel with Leaderboard -->
+          <div class="info-section">
+            <!-- Leaderboard panel -->
+            <div class="menu-card" style="margin-bottom: 1rem;">
+              <h3 class="info-title" style="color: #FFD700; margin-bottom: 1rem;">🏆 Global Leaderboard</h3>
+              <div id="leaderboard-content" style="font-family: 'Rajdhani', sans-serif; max-height: 250px; overflow-y: auto;">
+                <div style="color: #7A8B99; text-align: center; padding: 1rem;">
+                  Loading scores...
+                </div>
+              </div>
+            </div>
+            
+            <!-- Mission Brief panel -->
+            <div class="menu-card">
+              <h3 class="info-title">Mission Brief</h3>
+              <p class="info-text" style="font-size: 0.9rem;">
+                Navigate through endless waves of evolved AI bosses in deep space.
+              </p>
+              <p class="info-subtext" style="font-size: 0.85rem;">
+                Each victory evolves your enemies. Survive as long as you can.
+              </p>
+            </div>
+          </div>
+          
+          <!-- Controls panel -->
+          <div class="controls-section menu-card">
+            <h3 class="controls-title">Control Systems</h3>
+            <div class="controls-grid">
+              <div class="control-item">
+                <span class="key-combo">WASD</span>
+                <span class="control-desc">Navigate</span>
+              </div>
+              <div class="control-item">
+                <span class="key-combo">SPACE</span>
+                <span class="control-desc">Fire Weapons</span>
+              </div>
+              <div class="control-item">
+                <span class="key-combo">SHIFT</span>
+                <span class="control-desc">Boost Dash</span>
+              </div>
+              <div class="control-item">
+                <span class="key-combo">ESC</span>
+                <span class="control-desc">Pause</span>
               </div>
             </div>
           </div>
           
-          <!-- Mission Brief panel -->
-          <div class="menu-card">
-            <h3 class="info-title">Mission Brief</h3>
-            <p class="info-text" style="font-size: 0.9rem;">
-              Navigate through endless waves of evolved AI bosses in deep space.
-            </p>
-            <p class="info-subtext" style="font-size: 0.85rem;">
-              Each victory evolves your enemies. Survive as long as you can.
-            </p>
-          </div>
-        </div>
-        
-        <!-- Controls panel -->
-        <div class="controls-section menu-card">
-          <h3 class="controls-title">Control Systems</h3>
-          <div class="controls-grid">
-            <div class="control-item">
-              <span class="key-combo">WASD</span>
-              <span class="control-desc">Navigate</span>
+          <!-- Stats bar -->
+          <div class="stats-bar">
+            <div class="stat-item">
+              <span class="stat-value" id="menu-high-score">${localStorage.getItem('highScore') || '0'}</span>
+              <span class="stat-label">High Score</span>
             </div>
-            <div class="control-item">
-              <span class="key-combo">SPACE</span>
-              <span class="control-desc">Fire Weapons</span>
+            <div class="stat-item">
+              <span class="stat-value" id="menu-bosses-defeated">${localStorage.getItem('totalBosses') || '0'}</span>
+              <span class="stat-label">Bosses Defeated</span>
             </div>
-            <div class="control-item">
-              <span class="key-combo">SHIFT</span>
-              <span class="control-desc">Boost Dash</span>
-            </div>
-            <div class="control-item">
-              <span class="key-combo">ESC</span>
-              <span class="control-desc">Pause</span>
+            <div class="stat-item">
+              <span class="stat-value" id="menu-play-time">${this.formatPlayTime(parseInt(localStorage.getItem('totalPlayTime') || '0'))}</span>
+              <span class="stat-label">Play Time</span>
             </div>
           </div>
         </div>
-        
-        <!-- Stats bar -->
-        <div class="stats-bar">
-          <div class="stat-item">
-            <span class="stat-value" id="menu-high-score">${localStorage.getItem('highScore') || '0'}</span>
-            <span class="stat-label">High Score</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-value" id="menu-bosses-defeated">${localStorage.getItem('totalBosses') || '0'}</span>
-            <span class="stat-label">Bosses Defeated</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-value" id="menu-play-time">${this.formatPlayTime(parseInt(localStorage.getItem('totalPlayTime') || '0'))}</span>
-            <span class="stat-label">Play Time</span>
-          </div>
-        </div>
-      </div>
-    `;
+      `;
+    }
     document.body.appendChild(this.menuContainer);
     
     // Pause menu
@@ -1005,6 +1061,9 @@ export class Game {
       const startBtn = document.getElementById('start-game-btn');
       const walletText = document.getElementById('wallet-text');
       
+      // Check for existing Privy session first
+      this.checkExistingPrivySession();
+      
       if (this.walletConnect && this.walletConnect.getAddress()) {
         this.walletAddress = this.walletConnect.getAddress();
         const shortAddress = this.walletConnect.getShortAddress();
@@ -1037,6 +1096,44 @@ export class Game {
       menuBtn.style.display = 'none';
     }
 
+  }
+
+  private async checkExistingPrivySession(): Promise<void> {
+    // Check if there's an existing Privy session stored
+    try {
+      // Check localStorage for Privy session data
+      const privyToken = localStorage.getItem('privy:token');
+      const privyUser = localStorage.getItem('privy:user');
+      
+      if (privyToken && privyUser) {
+        console.log('Found existing Privy session, attempting to restore...');
+        
+        // Initialize Privy if not already done
+        if (!this.walletConnect) {
+          const { privyReactAuth } = await import('./PrivyReactAuth');
+          this.walletConnect = privyReactAuth;
+        }
+        
+        // Check if wallet is already connected
+        const existingAddress = this.walletConnect.getAddress();
+        if (existingAddress) {
+          this.walletAddress = existingAddress;
+          const shortAddress = this.walletConnect.getShortAddress();
+          
+          const walletText = document.getElementById('wallet-text');
+          const walletBtn = document.getElementById('wallet-connect-btn');
+          const startBtn = document.getElementById('start-game-btn');
+          
+          if (walletText) walletText.textContent = shortAddress + ' (Connected)';
+          if (walletBtn) walletBtn.style.display = 'none';
+          if (startBtn) startBtn.style.display = 'block';
+          
+          console.log('Privy session restored successfully');
+        }
+      }
+    } catch (error) {
+      console.log('No existing Privy session or failed to restore:', error);
+    }
   }
 
   // startGame method removed - deprecated, use showMapSelection() -> startGameWithArena() instead

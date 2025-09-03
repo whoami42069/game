@@ -9,6 +9,28 @@ function WalletConnector({ onConnect }: { onConnect: (address: string) => void }
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   
   useEffect(() => {
+    // Check if we're in a redirect/popup scenario
+    if (window.location.search.includes('privy_oauth_code') || 
+        window.location.search.includes('privy_oauth_state') ||
+        window.opener) {
+      console.log('Detected Privy redirect scenario');
+      
+      // If we have an opener, we're in a popup
+      if (window.opener && authenticated && user && user.wallet?.address) {
+        console.log('Sending auth success to parent window');
+        window.opener.postMessage({
+          type: 'privy-auth-success',
+          address: user.wallet.address
+        }, window.location.origin);
+        
+        // Close this window/tab after a short delay
+        setTimeout(() => {
+          window.close();
+        }, 100);
+        return;
+      }
+    }
+    
     if (authenticated && user) {
       console.log('Privy user authenticated:', user);
       
@@ -75,7 +97,22 @@ function WalletConnector({ onConnect }: { onConnect: (address: string) => void }
     
     try {
       console.log('Starting Privy login...');
+      // Store current window reference before login
+      const currentWindow = window.self;
+      
       await login();
+      
+      // After login, ensure we're in the correct window
+      if (window.opener && window.opener !== window) {
+        // We're in a popup/new tab, send message to parent and close
+        if (authenticated && user && user.wallet?.address) {
+          window.opener.postMessage({
+            type: 'privy-auth-success',
+            address: user.wallet.address
+          }, window.location.origin);
+          window.close();
+        }
+      }
     } catch (error) {
       console.error('Login error:', error);
     }
@@ -183,12 +220,30 @@ export class PrivyReactAuth {
         return;
       }
       
+      // Listen for messages from popup windows (in case of redirect)
+      const popupMessageHandler = (event: MessageEvent) => {
+        if (event.data && event.data.type === 'privy-auth-success' && event.data.address) {
+          console.log('Received auth success from popup:', event.data.address);
+          this.walletAddress = event.data.address;
+          
+          // Hide modal
+          if (this.modalDiv) {
+            this.modalDiv.style.display = 'none';
+          }
+          
+          window.removeEventListener('message', popupMessageHandler);
+          resolve(event.data.address);
+        }
+      };
+      window.addEventListener('message', popupMessageHandler);
+      
       // Show modal
       this.modalDiv.style.display = 'block';
       
       // Set callback
       this.onConnectCallback = (address: string) => {
         this.walletAddress = address;
+        window.removeEventListener('message', popupMessageHandler);
         resolve(address);
       };
       
@@ -225,6 +280,7 @@ export class PrivyReactAuth {
         if (e.key === 'Escape' && this.modalDiv) {
           this.modalDiv.style.display = 'none';
           document.removeEventListener('keydown', handleEsc);
+          window.removeEventListener('message', popupMessageHandler);
           resolve(this.walletAddress);
         }
       };
@@ -236,6 +292,7 @@ export class PrivyReactAuth {
           this.modalDiv.style.display = 'none';
           document.removeEventListener('click', handleClickOutside);
           document.removeEventListener('keydown', handleEsc);
+          window.removeEventListener('message', popupMessageHandler);
           resolve(this.walletAddress);
         }
       };
